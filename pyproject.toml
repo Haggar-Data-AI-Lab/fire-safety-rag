@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fire-safety-rag"
+version = "0.1.0"
+description = "Assistant RAG sur la réglementation sécurité incendie et sécurité privée, avec sources citées."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Hissein Haggar SENOUSSI" }]
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic-settings>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
