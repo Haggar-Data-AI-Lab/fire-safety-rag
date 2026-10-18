@@ -1,0 +1,22 @@
+# Environnement virtuel Python (recréable, propre à chaque machine)
+.venv/
+
+# Secrets et configuration locale : NE JAMAIS VERSIONNER
+.env
+
+# Caches générés par Python et les outils
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Fichiers produits lors de l'installation du paquet
+build/
+dist/
+*.egg-info/
+
+# Éditeur et système
+.vscode/
+Thumbs.db
+.DS_Store
