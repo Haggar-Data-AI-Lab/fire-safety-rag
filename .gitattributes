@@ -1,0 +1,7 @@
+# Normaliser les fins de ligne en LF dans le dépôt et dans le dossier de travail,
+# quel que soit le système d'exploitation (Windows, Linux, macOS).
+* text=auto eol=lf
+
+# Scripts Windows : garder CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
