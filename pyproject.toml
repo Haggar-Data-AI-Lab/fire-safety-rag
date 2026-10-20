@@ -12,6 +12,7 @@ authors = [{ name = "Hissein Haggar SENOUSSI" }]
 requires-python = ">=3.11"
 dependencies = [
     "pydantic-settings>=2.0",
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]
