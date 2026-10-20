@@ -32,6 +32,13 @@ en expliquer chaque partie. En conséquence :
 - Commits au format Conventional Commits, en français
   (ex. `feat: ajoute le chargement de la configuration`).
 - Un commit = un changement cohérent.
+- L'assistant n'exécute JAMAIS d'opération Git qui modifie le dépôt ou
+  l'historique (`git add`, `commit`, `push`, `merge`, `rebase`, `switch -c`,
+  création de PR). Le développeur les réalise lui-même, manuellement.
+- L'assistant peut utiliser Git en lecture seule (`git status`, `git diff`,
+  `git log`) pour comprendre l'état du dépôt.
+- À la fin de chaque étape, l'assistant liste les fichiers créés ou modifiés
+  et propose un message de commit, sans l'exécuter.
 
 ## Code
 
