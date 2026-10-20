@@ -9,7 +9,30 @@ publics et en citant ses sources.
 
 ## Statut
 
-🚧 En cours de développement : Phase 0 (socle) terminée, Phase 1 (ingestion) à venir.
+🚧 En cours de développement : Phase 1 (ingestion), corpus initial et base de données en place.
+
+## Démarrage rapide
+
+Prérequis : Python 3.11+, Docker Desktop.
+
+```bash
+# Environnement Python
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # Windows PowerShell
+pip install -e ".[dev]"
+
+# Configuration : copier le modèle puis définir un vrai mot de passe
+cp .env.example .env
+
+# Base de données PostgreSQL + pgvector
+docker compose up -d
+docker compose ps                 # STATUS doit afficher "healthy"
+
+# Vérifications
+pytest
+```
+
+Si le port 5432 est déjà utilisé sur votre machine, changez `POSTGRES_PORT` dans `.env`.
 
 ## Licence
 
