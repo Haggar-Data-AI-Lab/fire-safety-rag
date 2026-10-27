@@ -3,6 +3,8 @@
 import csv
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = ROOT / "data" / "sources.csv"
 RAW_DIR = ROOT / "data" / "raw"
@@ -53,7 +55,16 @@ def test_file_name_matches_id() -> None:
 
 
 def test_every_file_exists() -> None:
-    """Chaque fichier référencé existe bien dans data/raw/."""
+    """Chaque fichier référencé existe bien dans data/raw/.
+
+    Les documents ne sont pas versionnés : si data/raw/ ne contient aucun
+    document (cas de la CI), le corpus n'a pas été récupéré et le test est
+    ignoré. Dès qu'un document est présent, tout le catalogue est vérifié.
+    """
+    documents = [p for p in RAW_DIR.iterdir() if p.is_file() and p.name != ".gitkeep"]
+    if not documents:
+        pytest.skip("Corpus absent : les documents ne sont pas versionnés (voir README)")
+
     for row in read_catalogue():
         assert (RAW_DIR / row["fichier"]).is_file(), row["fichier"]
 

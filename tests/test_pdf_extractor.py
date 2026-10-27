@@ -2,9 +2,12 @@
 
 from pathlib import Path
 
+import pytest
+
 from fire_safety_rag.ingestion.pdf_extractor import PageText, clean_page_text, extract_pages
 
 DATA_RAW = Path(__file__).parent.parent / "data" / "raw"
+CODE_TRAVAIL_PDF = DATA_RAW / "code-travail-r4227-incendie.pdf"
 
 
 class TestCleanPageText:
@@ -109,10 +112,13 @@ class TestCleanPageText:
 class TestExtractPages:
     """Test d'intégration de la fonction extract_pages."""
 
+    @pytest.mark.skipif(
+        not CODE_TRAVAIL_PDF.is_file(),
+        reason="Corpus absent : les PDF ne sont pas versionnés (voir README)",
+    )
     def test_integration_code_travail(self) -> None:
         """Extraction complète de code-travail-r4227-incendie.pdf."""
-        pdf_path = DATA_RAW / "code-travail-r4227-incendie.pdf"
-        pages = list(extract_pages(pdf_path, document_id="code-travail-r4227"))
+        pages = list(extract_pages(CODE_TRAVAIL_PDF, document_id="code-travail-r4227"))
 
         # Nombre de pages correct
         assert len(pages) == 20

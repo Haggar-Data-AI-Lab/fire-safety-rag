@@ -34,6 +34,20 @@ pytest
 
 Si le port 5432 est déjà utilisé sur votre machine, changez `POSTGRES_PORT` dans `.env`.
 
+## Obtenir le corpus
+
+Les documents sources ne sont pas versionnés (volumineux, disponibles à leur source
+officielle). Le catalogue [`data/sources.csv`](data/sources.csv) liste chaque document
+avec son URL, sa date de version et sa licence.
+
+Pour reconstituer le corpus, pour chaque ligne du catalogue :
+
+1. ouvrir l'URL indiquée dans la colonne `url` (Légifrance) ;
+2. imprimer la page en PDF depuis le navigateur ;
+3. enregistrer le fichier dans `data/raw/` sous le nom indiqué dans la colonne `fichier`.
+
+Sans corpus, les tests qui en dépendent sont ignorés (`SKIPPED`) ; les autres s'exécutent normalement.
+
 ## Licence
 
 MIT. Voir [LICENSE](LICENSE).

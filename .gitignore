@@ -13,6 +13,10 @@
 logs/
 *.log
 
+# Documents sources du corpus (volumineux, récupérables depuis leur URL officielle)
+data/raw/*
+!data/raw/.gitkeep
+
 # Données produites par le pipeline (régénérables)
 data/processed/
 
