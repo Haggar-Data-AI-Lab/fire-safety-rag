@@ -3,6 +3,8 @@
 import csv
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 CATALOGUE = ROOT / "data" / "sources.csv"
 RAW_DIR = ROOT / "data" / "raw"
@@ -23,6 +25,8 @@ EXPECTED_COLUMNS = [
 ]
 ALLOWED_TYPES = {"arrete", "code", "convention", "guide"}
 ALLOWED_THEMES = {"incendie", "securite-privee", "social", "vulgarisation"}
+# Identifiants SPDX des licences vérifiées (etalab-2.0 = Licence Ouverte 2.0)
+ALLOWED_LICENCES = {"etalab-2.0"}
 
 
 def read_catalogue() -> list[dict[str, str]]:
@@ -53,13 +57,23 @@ def test_file_name_matches_id() -> None:
 
 
 def test_every_file_exists() -> None:
-    """Chaque fichier référencé existe bien dans data/raw/."""
+    """Chaque fichier référencé existe bien dans data/raw/.
+
+    Les documents ne sont pas versionnés : si data/raw/ ne contient aucun
+    document (cas de la CI), le corpus n'a pas été récupéré et le test est
+    ignoré. Dès qu'un document est présent, tout le catalogue est vérifié.
+    """
+    documents = [p for p in RAW_DIR.iterdir() if p.is_file() and p.name != ".gitkeep"]
+    if not documents:
+        pytest.skip("Corpus absent : les documents ne sont pas versionnés (voir README)")
+
     for row in read_catalogue():
         assert (RAW_DIR / row["fichier"]).is_file(), row["fichier"]
 
 
 def test_controlled_vocabularies() -> None:
-    """Les colonnes type et theme n'utilisent que les valeurs autorisées."""
+    """Les colonnes type, theme et licence n'utilisent que les valeurs autorisées."""
     for row in read_catalogue():
         assert row["type"] in ALLOWED_TYPES, row["id"]
         assert row["theme"] in ALLOWED_THEMES, row["id"]
+        assert row["licence"] in ALLOWED_LICENCES, row["id"]

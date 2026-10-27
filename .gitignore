@@ -4,6 +4,25 @@
 # Secrets et configuration locale : NE JAMAIS VERSIONNER
 .env
 
+# Variantes locales du fichier de secrets (.env.local, .env.prod...)
+# Le modèle .env.example, sans secret, reste versionné.
+.env.*
+!.env.example
+
+# Journaux d'exécution (peuvent contenir des questions et des chemins locaux)
+logs/
+*.log
+
+# Documents sources du corpus (volumineux, récupérables depuis leur URL officielle)
+data/raw/*
+!data/raw/.gitkeep
+
+# Données produites par le pipeline (régénérables)
+data/processed/
+
+# Notes personnelles (privées, jamais publiées)
+notes/
+
 # Caches générés par Python et les outils
 __pycache__/
 *.py[cod]
@@ -16,7 +35,12 @@ build/
 dist/
 *.egg-info/
 
+# Rapports de couverture des tests
+.coverage
+htmlcov/
+
 # Éditeur et système
 .vscode/
+.idea/
 Thumbs.db
 .DS_Store
