@@ -25,6 +25,8 @@ EXPECTED_COLUMNS = [
 ]
 ALLOWED_TYPES = {"arrete", "code", "convention", "guide"}
 ALLOWED_THEMES = {"incendie", "securite-privee", "social", "vulgarisation"}
+# Identifiants SPDX des licences vérifiées (etalab-2.0 = Licence Ouverte 2.0)
+ALLOWED_LICENCES = {"etalab-2.0"}
 
 
 def read_catalogue() -> list[dict[str, str]]:
@@ -70,7 +72,8 @@ def test_every_file_exists() -> None:
 
 
 def test_controlled_vocabularies() -> None:
-    """Les colonnes type et theme n'utilisent que les valeurs autorisées."""
+    """Les colonnes type, theme et licence n'utilisent que les valeurs autorisées."""
     for row in read_catalogue():
         assert row["type"] in ALLOWED_TYPES, row["id"]
         assert row["theme"] in ALLOWED_THEMES, row["id"]
+        assert row["licence"] in ALLOWED_LICENCES, row["id"]
