@@ -2,17 +2,13 @@
 
 ## 1. Contexte
 
-Je suis Haggar Senoussi, étudiant en Master 2 Data / Intelligence Artificielle à SUPINFO Tours. Je recherche un stage de 6 mois en Data / IA à partir de janvier 2027.
+Projet conçu et développé par Haggar Senoussi, étudiant en Master 2 Data / Intelligence Artificielle et agent de sécurité privée. Le sujet vient du terrain : la réglementation sécurité incendie est dispersée dans de longs textes, et retrouver rapidement la bonne règle, avec sa source, est difficile.
 
-Ce projet a trois objectifs :
+Le projet a trois objectifs :
 
-1. **Renforcer mon CV et mon portfolio GitHub** avec un projet d'IA générative concret, déployé et démontrable en entretien.
-2. **Développer mes compétences** en IA appliquée (LLM, RAG, bases vectorielles, API, déploiement) en m'appuyant sur mon expérience en data engineering (ETL/ELT, Snowflake, Bash, CRON, alertes).
-3. **Servir de démonstration** pour de futures prestations d'intégration de l'IA en entreprise.
-
-Le sujet s'appuie sur ma connaissance du terrain : je travaille comme agent de sécurité privée et je fonde une société de sécurité incendie et de gestion des risques au Tchad.
-
-**Échéance visée :** une première version démontrable fin novembre 2026.
+1. **Construire un assistant d'IA générative concret**, déployé et démontrable.
+2. **Appliquer au RAG les pratiques du data engineering** : pipelines idempotents, journalisation, gestion des erreurs, tests et intégration continue.
+3. **Mesurer la qualité des réponses** par une évaluation reproductible, plutôt que de la supposer.
 
 ## 2. Description du produit
 
@@ -85,35 +81,27 @@ Ne pas tout installer d'un coup. Expliquer chaque dépendance avant de l'ajouter
 - Enregistrer pour chaque document sa source, son URL, sa date et sa licence.
 - Commencer avec un petit corpus (10 à 20 documents), puis l'élargir.
 
-## 6. Organisation du dépôt (indicative)
+## 6. Organisation du dépôt
 
 ```
-securag/
-├── README.md
-├── CADRAGE.md
-├── pyproject.toml
-├── .env.example
-├── .gitignore
-├── docker-compose.yml
+fire-safety-rag/
+├── README.md, CADRAGE.md, CLAUDE.md, LICENSE
+├── pyproject.toml          # dépendances et configuration des outils
+├── .env.example            # modèle de configuration, sans secret
+├── docker-compose.yml      # PostgreSQL + pgvector
+├── .github/workflows/      # intégration continue (ruff, mypy, pytest)
+├── db/init/                # scripts SQL exécutés au premier démarrage
 ├── data/
-│   ├── raw/          # documents sources (non versionnés si volumineux)
-│   └── processed/
-├── src/
-│   └── securag/
-│       ├── config/
-│       ├── ingestion/
-│       ├── embeddings/
-│       ├── storage/
-│       ├── retrieval/
-│       ├── generation/
-│       ├── evaluation/
-│       └── api/
-├── app/              # interface Streamlit
-├── tests/
-├── eval/             # jeu de questions de test
-├── logs/
-└── docs/
+│   ├── sources.csv         # catalogue du corpus (versionné)
+│   ├── raw/                # documents sources (non versionnés)
+│   └── processed/          # données produites (non versionnées)
+├── src/fire_safety_rag/
+│   ├── config.py
+│   └── ingestion/          # extraction du texte des PDF
+└── tests/
 ```
+
+À venir, au fil des phases : modules `retrieval/`, `generation/`, `evaluation/` et `api/` dans `src/fire_safety_rag/`, interface Streamlit dans `app/`, jeu de questions dans `eval/`, journaux dans `logs/` (non versionnés).
 
 ## 7. Sécurité et bonnes pratiques
 
@@ -128,7 +116,6 @@ securag/
 - Objectif : moins de 10 € par mois pendant le développement.
 - Embeddings en local (gratuit), base de données en local via Docker (gratuit).
 - Seuls les appels au LLM sont payants : utiliser un modèle économique et un petit corpus.
-- Aucun achat ni service payant sans mon accord explicite.
 
 ## 9. Plan de développement
 
@@ -140,27 +127,10 @@ securag/
 - **Phase 5 — Industrialisation :** Docker, README complet, démo en ligne.
 - **Phase 6 — Valorisation :** ligne de CV, post LinkedIn, préparation de la démo pour les entretiens.
 
-## 10. Règles de travail pour l'assistant
+## 10. Environnement
 
-1. Travailler étape par étape, avec une approche pédagogique : expliquer l'objectif, le fonctionnement et les choix de chaque étape. Je veux comprendre et être capable d'expliquer le projet en entretien.
-2. Examiner le dossier existant avant de créer ou modifier des fichiers. Ne rien supprimer sans vérifier.
-3. Ne pas générer tout le projet d'un coup. Une étape limitée et vérifiable à la fois.
-4. Expliquer chaque dépendance avant de l'ajouter.
-5. Code lisible, typé, documenté et testé.
-6. Ne jamais inventer de résultats (évaluations, réponses d'API).
-7. Signaler les décisions qui nécessitent mes identifiants, mon accord ou un paiement.
-8. Distinguer clairement ce qui fonctionne, ce qui est simulé et ce qui reste à faire.
-9. Après chaque étape : fichiers créés ou modifiés, tests effectués, commandes pour vérifier moi-même, prochaine étape proposée.
-10. Attendre ma validation avant de passer à l'étape suivante.
+- Windows 11, VS Code, Python 3.11 (environnement virtuel `.venv`), Git, Docker Desktop.
+- Base de données : image `pgvector/pgvector:pg17` (PostgreSQL 17, extension pgvector).
+- Dépôt GitHub public : `Haggar-Data-AI-Lab/fire-safety-rag`.
 
-## 11. Environnement
-
-- Windows, VS Code, Python, `.venv`, Git, Docker Desktop (à vérifier).
-- Dépôt GitHub : `Haggar-Data-AI-Lab/fire-safety-rag` (nom provisoire).
-
-## 12. Première action demandée
-
-1. Vérifier l'environnement : versions de Python, Git, Docker.
-2. Proposer la structure minimale de la Phase 0.
-3. Lister les dépendances de la Phase 0 et leur rôle.
-4. Attendre ma validation avant d'implémenter.
+Les conventions de travail (Git, code, méthode) sont décrites dans `CLAUDE.md`.

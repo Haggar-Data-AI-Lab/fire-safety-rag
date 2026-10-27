@@ -20,6 +20,9 @@ data/raw/*
 # Données produites par le pipeline (régénérables)
 data/processed/
 
+# Notes personnelles (privées, jamais publiées)
+notes/
+
 # Caches générés par Python et les outils
 __pycache__/
 *.py[cod]

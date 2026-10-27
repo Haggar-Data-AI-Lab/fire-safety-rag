@@ -23,6 +23,12 @@ en expliquer chaque partie. En conséquence :
 6. Ne jamais inventer de résultats (tests, évaluations, réponses d'API).
 7. Signaler toute action nécessitant des identifiants, un paiement
    ou un accord.
+8. Examiner l'existant avant de créer ou modifier un fichier ;
+   ne rien supprimer sans vérifier.
+9. Distinguer clairement ce qui fonctionne, ce qui est simulé
+   et ce qui reste à faire.
+10. Après chaque étape : fichiers créés ou modifiés, tests effectués,
+    commandes pour vérifier soi-même, prochaine étape proposée.
 
 ## Git
 
