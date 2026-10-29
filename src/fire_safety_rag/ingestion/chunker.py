@@ -47,6 +47,14 @@ _RE_VERSION: re.Pattern[str] = re.compile(
     r"|DU (\d{2}/\d{2}/\d{4}) AU (\d{2}/\d{2}/\d{4}))$"
 )
 
+# Ligne d'historique Légifrance, placée en tête d'article, juste après la
+# ligne de version.
+# Exemples observés :
+#   "Modifié par Arrêté du 7 février 2022 - art. 3"
+#   "Création Décret n°2008-244 du 7 mars 2008 - art. (V)"
+#   "Transféré par Arrêté du 11 décembre 2009 - art."
+_RE_HISTORY_LINE: re.Pattern[str] = re.compile(r"^(?:Création|Modifié par|Transféré par)\b")
+
 
 # ---------------------------------------------------------------------------
 # Structures de données
@@ -65,8 +73,10 @@ class Article:
         valid_from: date de début de vigueur, lue dans `version`.
         valid_until: date de fin de vigueur, lue dans `version` ; None si
             l'article est en vigueur sans date de fin.
-        text: contenu de l'article, sans la ligne de titre ni la ligne de
-            version.
+        history: lignes d'historique Légifrance retirées du texte (ex.
+            "Modifié par Arrêté du 7 février 2022 - art. 3").
+        text: contenu de l'article, sans la ligne de titre, la ligne de
+            version ni les lignes d'historique.
         page_start: page du PDF où se trouve le titre de l'article.
         page_end: page du PDF où se trouve la dernière ligne non vide de
             l'article.
@@ -80,6 +90,7 @@ class Article:
     version: str
     valid_from: date
     valid_until: date | None
+    history: tuple[str, ...]
     text: str
     page_start: int
     page_end: int
@@ -99,6 +110,7 @@ class Chunk:
         version: ligne de version Légifrance de l'article d'origine.
         valid_from: date de début de vigueur de l'article d'origine.
         valid_until: date de fin de vigueur de l'article d'origine, ou None.
+        history: lignes d'historique Légifrance de l'article d'origine.
         chunk_index: position du morceau dans l'article, en commençant à 0.
         text: contenu du morceau.
         page_start: page du PDF de la première ligne du morceau.
@@ -110,6 +122,7 @@ class Chunk:
     version: str
     valid_from: date
     valid_until: date | None
+    history: tuple[str, ...]
     chunk_index: int
     text: str
     page_start: int
@@ -165,6 +178,33 @@ def _next_non_empty(lines: list[str], start: int) -> int | None:
         if lines[index]:
             return index
     return None
+
+
+def _split_history(lines: Sequence[str]) -> tuple[tuple[str, ...], int]:
+    """Repère les lignes d'historique Légifrance au début d'un contenu.
+
+    Seules les lignes consécutives en tête sont prises : une ligne
+    "Création ..." au milieu du texte n'est pas touchée. Une ligne
+    d'historique qui ouvre une parenthèse sans la fermer a été coupée par la
+    mise en page du PDF : on lui recolle la ligne suivante.
+    Exemple : "... v. init. (en dernier" + "lieu)".
+
+    Args:
+        lines: lignes du contenu d'un article, à partir de sa première ligne.
+
+    Returns:
+        Couple (lignes d'historique, nombre de lignes consommées dans `lines`).
+    """
+    history: list[str] = []
+    index = 0
+    while index < len(lines) and _RE_HISTORY_LINE.match(lines[index]):
+        entry = lines[index]
+        index += 1
+        if entry.count("(") > entry.count(")") and index < len(lines):
+            entry = f"{entry} {lines[index]}"
+            index += 1
+        history.append(entry)
+    return tuple(history), index
 
 
 def _heading_id(line: str) -> str | None:
@@ -241,6 +281,12 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
         while end > start and not lines[end - 1]:
             end -= 1
 
+        # Retrait des lignes d'historique en tête, puis des lignes vides qui suivent
+        history, consumed = _split_history(lines[start:end])
+        start += consumed
+        while start < end and not lines[start]:
+            start += 1
+
         # Dernière ligne non vide de l'article (au minimum, sa ligne de version)
         last_index = end - 1 if end > start else version_index
         valid_from, valid_until = parse_version(lines[version_index])
@@ -252,6 +298,7 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
                 version=lines[version_index],
                 valid_from=valid_from,
                 valid_until=valid_until,
+                history=history,
                 text="\n".join(lines[start:end]),
                 page_start=line_pages[heading_index],
                 page_end=line_pages[last_index],
@@ -303,6 +350,7 @@ def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 
                 version=article.version,
                 valid_from=article.valid_from,
                 valid_until=article.valid_until,
+                history=article.history,
                 chunk_index=0,
                 text=article.text,
                 page_start=article.page_start,
@@ -341,6 +389,7 @@ def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 
                 version=article.version,
                 valid_from=article.valid_from,
                 valid_until=article.valid_until,
+                history=article.history,
                 chunk_index=len(chunks),
                 text="\n".join(lines[start:end]),
                 page_start=article.line_pages[start],
