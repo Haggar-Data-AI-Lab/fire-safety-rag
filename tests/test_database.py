@@ -1,6 +1,5 @@
 """Tests unitaires et d'intégration pour le module database."""
 
-from collections.abc import Iterator
 from typing import Any
 
 import psycopg
@@ -14,17 +13,6 @@ def test_connect_sans_mot_de_passe_leve_une_erreur() -> None:
     """Sans POSTGRES_PASSWORD, connect() échoue clairement, sans contacter la base."""
     with pytest.raises(ValueError, match="POSTGRES_PASSWORD"):
         connect(Settings(postgres_password=None))
-
-
-@pytest.fixture
-def connection() -> Iterator[psycopg.Connection[tuple[Any, ...]]]:
-    """Connexion à la vraie base ; le test est sauté si elle est injoignable (cas de la CI)."""
-    try:
-        conn = connect()
-    except (ValueError, psycopg.OperationalError) as exc:
-        pytest.skip(f"Base PostgreSQL injoignable : {exc}")
-    with conn:
-        yield conn
 
 
 def test_extension_vector_installee(connection: psycopg.Connection[tuple[Any, ...]]) -> None:
