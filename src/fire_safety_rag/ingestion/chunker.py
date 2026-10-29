@@ -48,11 +48,41 @@ class Article:
         page_start: page du PDF où se trouve le titre de l'article.
         page_end: page du PDF où se trouve la dernière ligne non vide de
             l'article.
+        line_pages: page de chaque ligne de `text`, dans l'ordre (un élément
+            par ligne de `text.splitlines()`). Sert à donner leurs vraies
+            pages aux morceaux d'un article long.
     """
 
     document_id: str
     article_id: str
     version: str
+    text: str
+    page_start: int
+    page_end: int
+    line_pages: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class Chunk:
+    """Représente un morceau de texte prêt à être vectorisé (embedding).
+
+    Un article court donne un seul morceau ; un article long en donne
+    plusieurs, qui se chevauchent légèrement.
+
+    Attributes:
+        document_id: identifiant unique du document dans le corpus.
+        article_id: identifiant de l'article d'origine.
+        version: ligne de version Légifrance de l'article d'origine.
+        chunk_index: position du morceau dans l'article, en commençant à 0.
+        text: contenu du morceau.
+        page_start: page du PDF de la première ligne du morceau.
+        page_end: page du PDF de la dernière ligne du morceau.
+    """
+
+    document_id: str
+    article_id: str
+    version: str
+    chunk_index: int
     text: str
     page_start: int
     page_end: int
@@ -125,24 +155,124 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
     # Construction des articles : le contenu s'arrête au titre suivant
     articles: list[Article] = []
     for position, (heading_index, article_id, version_index) in enumerate(headings):
+        start = version_index + 1
         end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
-        body = "\n".join(lines[version_index + 1 : end]).strip()
+
+        # Retrait des lignes vides au début et à la fin du contenu, par indices
+        # (et non par strip()) pour que line_pages reste aligné sur le texte
+        while start < end and not lines[start]:
+            start += 1
+        while end > start and not lines[end - 1]:
+            end -= 1
 
         # Dernière ligne non vide de l'article (au minimum, sa ligne de version)
-        last_index = version_index
-        for index in range(end - 1, version_index, -1):
-            if lines[index]:
-                last_index = index
-                break
+        last_index = end - 1 if end > start else version_index
 
         articles.append(
             Article(
                 document_id=document_id,
                 article_id=article_id,
                 version=lines[version_index],
-                text=body,
+                text="\n".join(lines[start:end]),
                 page_start=line_pages[heading_index],
                 page_end=line_pages[last_index],
+                line_pages=tuple(line_pages[start:end]),
             )
         )
     return articles
+
+
+def _ends_sentence(line: str) -> bool:
+    """Indique si une ligne termine une phrase ou un élément d'énumération.
+
+    Args:
+        line: ligne de texte.
+
+    Returns:
+        True si la ligne se termine par ".", ";" ou ":".
+    """
+    return line.endswith((".", ";", ":"))
+
+
+def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 200) -> list[Chunk]:
+    """Découpe un article en morceaux d'au plus `max_chars` caractères.
+
+    Le PDF ne marque pas les paragraphes : la découpe se fait donc entre deux
+    lignes. Pour un article trop long :
+    - on remplit le morceau ligne par ligne tant qu'il tient dans `max_chars` ;
+    - on recule la coupe jusqu'à la dernière ligne qui termine une phrase
+      (".", ";", ":"), si cela laisse un morceau d'au moins `max_chars // 2`
+      caractères ; sinon on coupe à la dernière ligne qui tient ;
+    - le morceau suivant reprend les dernières lignes du précédent, dans la
+      limite de `overlap_chars` caractères (chevauchement).
+
+    Une ligne seule plus longue que `max_chars` forme un morceau à elle seule.
+
+    Args:
+        article: article à découper.
+        max_chars: taille maximale visée d'un morceau, en caractères.
+        overlap_chars: taille maximale du chevauchement, en caractères.
+
+    Returns:
+        Morceaux de l'article, dans l'ordre, numérotés à partir de 0.
+    """
+    if len(article.text) <= max_chars:
+        return [
+            Chunk(
+                document_id=article.document_id,
+                article_id=article.article_id,
+                version=article.version,
+                chunk_index=0,
+                text=article.text,
+                page_start=article.page_start,
+                page_end=article.page_end,
+            )
+        ]
+
+    lines = article.text.splitlines()
+    chunks: list[Chunk] = []
+    start = 0
+    while start < len(lines):
+        # Remplissage : on ajoute des lignes tant que le morceau tient
+        end = start
+        size = 0
+        while end < len(lines):
+            added = len(lines[end]) + (1 if end > start else 0)  # +1 pour "\n"
+            if size + added > max_chars:
+                break
+            size += added
+            end += 1
+        if end == start:
+            end = start + 1  # ligne seule trop longue
+
+        # Coupe de préférence après une fin de phrase, si le morceau reste assez long
+        if end < len(lines):
+            for cut in range(end, start, -1):
+                if _ends_sentence(lines[cut - 1]):
+                    if len("\n".join(lines[start:cut])) >= max_chars // 2:
+                        end = cut
+                    break
+
+        chunks.append(
+            Chunk(
+                document_id=article.document_id,
+                article_id=article.article_id,
+                version=article.version,
+                chunk_index=len(chunks),
+                text="\n".join(lines[start:end]),
+                page_start=article.line_pages[start],
+                page_end=article.line_pages[end - 1],
+            )
+        )
+        if end >= len(lines):
+            break
+
+        # Chevauchement : on recule tant que les lignes reprises tiennent dans
+        # overlap_chars, sans revenir au début du morceau (pour toujours avancer)
+        next_start = end
+        overlap = 0
+        while next_start - 1 > start and overlap + len(lines[next_start - 1]) <= overlap_chars:
+            next_start -= 1
+            overlap += len(lines[next_start]) + 1
+        start = next_start
+    return chunks

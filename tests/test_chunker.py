@@ -1,12 +1,25 @@
 """Tests unitaires pour le module chunker."""
 
-from fire_safety_rag.ingestion.chunker import Article, split_into_articles
+from fire_safety_rag.ingestion.chunker import Article, split_article, split_into_articles
 from fire_safety_rag.ingestion.pdf_extractor import PageText
 
 
 def _single_page(text: str, document_id: str = "doc") -> list[PageText]:
     """Construit un document d'une seule page (page 1) à partir d'un texte."""
     return [PageText(document_id=document_id, page_number=1, text=text)]
+
+
+def _make_article(lines: list[str], pages: list[int]) -> Article:
+    """Construit un Article à partir de ses lignes et de la page de chacune."""
+    return Article(
+        document_id="doc",
+        article_id="GN 1",
+        version="VERSION EN VIGUEUR DEPUIS LE 01/01/2020",
+        text="\n".join(lines),
+        page_start=pages[0],
+        page_end=pages[-1],
+        line_pages=tuple(pages),
+    )
 
 
 class TestSplitIntoArticles:
@@ -35,6 +48,7 @@ class TestSplitIntoArticles:
                 ),
                 page_start=1,
                 page_end=1,
+                line_pages=(1, 1),
             ),
             Article(
                 document_id="code-travail",
@@ -43,6 +57,7 @@ class TestSplitIntoArticles:
                 text="La largeur des dégagements est calculée.",
                 page_start=1,
                 page_end=1,
+                line_pages=(1,),
             ),
         ]
 
@@ -108,6 +123,7 @@ class TestSplitIntoArticles:
         result = split_into_articles(pages)
         assert len(result) == 1
         assert (result[0].page_start, result[0].page_end) == (1, 2)
+        assert result[0].line_pages == (1, 2)
         assert result[0].text == (
             "Les établissements comportent des dégagements.\nCes dégagements sont libres."
         )
@@ -128,3 +144,62 @@ class TestSplitIntoArticles:
         ]
         result = split_into_articles(pages)
         assert [(a.page_start, a.page_end) for a in result] == [(1, 1), (2, 2)]
+
+
+class TestSplitArticle:
+    """Tests unitaires de la fonction split_article."""
+
+    @staticmethod
+    def _lines(count: int) -> list[str]:
+        """Renvoie `count` lignes de 10 caractères terminées par un point."""
+        return [f"ligne {index:03d}." for index in range(count)]
+
+    def test_article_court_donne_un_morceau(self) -> None:
+        """Un article qui tient dans max_chars donne un seul morceau identique."""
+        article = _make_article(["Première ligne.", "Seconde ligne."], [4, 5])
+        result = split_article(article)
+        assert len(result) == 1
+        assert result[0].chunk_index == 0
+        assert result[0].text == article.text
+        assert (result[0].page_start, result[0].page_end) == (4, 5)
+
+    def test_aucun_morceau_ne_depasse_max_chars(self) -> None:
+        """Sans chevauchement, les morceaux respectent la taille et couvrent tout."""
+        lines = self._lines(10)
+        result = split_article(_make_article(lines, [1] * 10), max_chars=35, overlap_chars=0)
+        assert all(len(chunk.text) <= 35 for chunk in result)
+        assert [chunk.chunk_index for chunk in result] == list(range(len(result)))
+        assert "\n".join(chunk.text for chunk in result) == "\n".join(lines)
+
+    def test_coupe_apres_fin_de_phrase(self) -> None:
+        """La coupe recule jusqu'à la dernière ligne qui termine une phrase."""
+        lines = ["Phrase un est finie.", "suite", "de texte"]
+        result = split_article(_make_article(lines, [1, 1, 1]), max_chars=28, overlap_chars=0)
+        assert [chunk.text for chunk in result] == ["Phrase un est finie.", "suite\nde texte"]
+
+    def test_ignore_fin_de_phrase_si_morceau_trop_court(self) -> None:
+        """Une fin de phrase qui laisserait un morceau trop court est ignorée."""
+        lines = ["Court.", "aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc"]
+        result = split_article(_make_article(lines, [1] * 4), max_chars=30, overlap_chars=0)
+        assert result[0].text == "Court.\naaaaaaaaaa\nbbbbbbbbbb"
+
+    def test_chevauchement(self) -> None:
+        """Le morceau suivant reprend la dernière ligne du précédent."""
+        result = split_article(
+            _make_article(self._lines(6), [1] * 6), max_chars=32, overlap_chars=12
+        )
+        assert len(result) >= 2
+        assert result[1].text.splitlines()[0] == result[0].text.splitlines()[-1]
+
+    def test_ligne_trop_longue_forme_un_morceau(self) -> None:
+        """Une ligne plus longue que max_chars forme un morceau à elle seule."""
+        lines = ["x" * 50, "fin."]
+        result = split_article(_make_article(lines, [1, 1]), max_chars=20)
+        assert [chunk.text for chunk in result] == ["x" * 50, "fin."]
+
+    def test_pages_propres_a_chaque_morceau(self) -> None:
+        """Chaque morceau porte les pages de ses propres lignes."""
+        result = split_article(
+            _make_article(self._lines(4), [3, 3, 4, 5]), max_chars=21, overlap_chars=0
+        )
+        assert [(chunk.page_start, chunk.page_end) for chunk in result] == [(3, 3), (4, 5)]
