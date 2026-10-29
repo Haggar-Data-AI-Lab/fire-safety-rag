@@ -1,6 +1,15 @@
 """Tests unitaires pour le module chunker."""
 
-from fire_safety_rag.ingestion.chunker import Article, split_article, split_into_articles
+from datetime import date
+
+import pytest
+
+from fire_safety_rag.ingestion.chunker import (
+    Article,
+    parse_version,
+    split_article,
+    split_into_articles,
+)
 from fire_safety_rag.ingestion.pdf_extractor import PageText
 
 
@@ -15,11 +24,36 @@ def _make_article(lines: list[str], pages: list[int]) -> Article:
         document_id="doc",
         article_id="GN 1",
         version="VERSION EN VIGUEUR DEPUIS LE 01/01/2020",
+        valid_from=date(2020, 1, 1),
+        valid_until=None,
         text="\n".join(lines),
         page_start=pages[0],
         page_end=pages[-1],
         line_pages=tuple(pages),
     )
+
+
+class TestParseVersion:
+    """Tests unitaires de la fonction parse_version."""
+
+    def test_format_depuis_le(self) -> None:
+        """Le format "DEPUIS LE" donne une date de début et pas de date de fin."""
+        assert parse_version("VERSION EN VIGUEUR DEPUIS LE 01/05/2008") == (
+            date(2008, 5, 1),
+            None,
+        )
+
+    def test_format_du_au(self) -> None:
+        """Le format "DU ... AU ..." donne une date de début et une date de fin."""
+        assert parse_version("VERSION EN VIGUEUR DU 15/08/1980 AU 01/06/2027") == (
+            date(1980, 8, 15),
+            date(2027, 6, 1),
+        )
+
+    def test_format_inconnu_leve_une_erreur(self) -> None:
+        """Une ligne de version inconnue lève ValueError au lieu d'être ignorée."""
+        with pytest.raises(ValueError, match="non reconnue"):
+            parse_version("VERSION EN VIGUEUR AU 19/10/2026")
 
 
 class TestSplitIntoArticles:
@@ -42,6 +76,8 @@ class TestSplitIntoArticles:
                 document_id="code-travail",
                 article_id="R4227-4",
                 version="VERSION EN VIGUEUR DEPUIS LE 01/05/2008",
+                valid_from=date(2008, 5, 1),
+                valid_until=None,
                 text=(
                     "Les établissements comportent des dégagements.\n"
                     "Ces dégagements sont toujours libres."
@@ -54,6 +90,8 @@ class TestSplitIntoArticles:
                 document_id="code-travail",
                 article_id="R4227-5",
                 version="VERSION EN VIGUEUR DEPUIS LE 01/05/2008",
+                valid_from=date(2008, 5, 1),
+                valid_until=None,
                 text="La largeur des dégagements est calculée.",
                 page_start=1,
                 page_end=1,
