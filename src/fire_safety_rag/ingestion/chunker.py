@@ -22,6 +22,17 @@ from fire_safety_rag.ingestion.pdf_extractor import PageText
 # de l'arrêté SSIAP) le respecte aussi. Voir _VERSION_PREFIX.
 _RE_ARTICLE_HEADING: re.Pattern[str] = re.compile(r"^Article\s+(\S+(?: \S+){0,2})$")
 
+# Ligne contenant uniquement un titre d'annexe. L'identifiant retenu est la
+# ligne entière.
+# Exemples observés :
+#   "Annexe"                    (arrêté ERP, annexe de T 52)
+#   "Annexe I", "Annexe XIII"   (arrêté SSIAP)
+#   "Annexe à l'article PO 11"  (arrêté ERP)
+# Le sommaire "Annexes (Articles Annexe I à Annexe XIII)" n'est pas reconnu
+# ("Annexes" au pluriel), et la vérification de la ligne VERSION s'applique
+# comme pour les articles.
+_RE_ANNEX_HEADING: re.Pattern[str] = re.compile(r"^Annexe(?: .{1,40})?$")
+
 # Début de la ligne qui suit TOUJOURS un vrai titre d'article Légifrance.
 _VERSION_PREFIX = "VERSION EN VIGUEUR"
 
@@ -156,11 +167,30 @@ def _next_non_empty(lines: list[str], start: int) -> int | None:
     return None
 
 
+def _heading_id(line: str) -> str | None:
+    """Renvoie l'identifiant d'un titre d'article ou d'annexe.
+
+    Args:
+        line: ligne de texte, débarrassée des espaces de bord.
+
+    Returns:
+        "R4227-4" pour "Article R4227-4", la ligne entière pour une annexe
+        (ex. "Annexe I"), ou None si la ligne n'a pas la forme d'un titre.
+    """
+    article_match = _RE_ARTICLE_HEADING.match(line)
+    if article_match is not None:
+        return article_match.group(1)
+    if _RE_ANNEX_HEADING.match(line):
+        return line
+    return None
+
+
 def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
     """Découpe les pages d'un document en articles réglementaires.
 
-    Une ligne est un titre d'article si elle correspond à "Article <identifiant>"
-    ET si la ligne non vide suivante commence par "VERSION EN VIGUEUR".
+    Une ligne est un titre si elle correspond à "Article <identifiant>" ou
+    "Annexe ..." ET si la ligne non vide suivante commence par
+    "VERSION EN VIGUEUR". Les annexes sont traitées comme des articles.
     Le contenu d'un article va de la ligne qui suit sa version jusqu'au titre
     de l'article suivant (ou jusqu'à la fin du document), même s'il s'étend
     sur plusieurs pages.
@@ -191,12 +221,12 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
     # Repérage des titres : (indice du titre, identifiant, indice de la version)
     headings: list[tuple[int, str, int]] = []
     for index, line in enumerate(lines):
-        match = _RE_ARTICLE_HEADING.match(line)
-        if match is None:
+        article_id = _heading_id(line)
+        if article_id is None:
             continue
         version_index = _next_non_empty(lines, index + 1)
         if version_index is not None and lines[version_index].startswith(_VERSION_PREFIX):
-            headings.append((index, match.group(1), version_index))
+            headings.append((index, article_id, version_index))
 
     # Construction des articles : le contenu s'arrête au titre suivant
     articles: list[Article] = []
