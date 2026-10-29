@@ -26,6 +26,7 @@ def _make_article(lines: list[str], pages: list[int]) -> Article:
         version="VERSION EN VIGUEUR DEPUIS LE 01/01/2020",
         valid_from=date(2020, 1, 1),
         valid_until=None,
+        history=(),
         text="\n".join(lines),
         page_start=pages[0],
         page_end=pages[-1],
@@ -78,6 +79,7 @@ class TestSplitIntoArticles:
                 version="VERSION EN VIGUEUR DEPUIS LE 01/05/2008",
                 valid_from=date(2008, 5, 1),
                 valid_until=None,
+                history=(),
                 text=(
                     "Les établissements comportent des dégagements.\n"
                     "Ces dégagements sont toujours libres."
@@ -92,6 +94,7 @@ class TestSplitIntoArticles:
                 version="VERSION EN VIGUEUR DEPUIS LE 01/05/2008",
                 valid_from=date(2008, 5, 1),
                 valid_until=None,
+                history=(),
                 text="La largeur des dégagements est calculée.",
                 page_start=1,
                 page_end=1,
@@ -276,3 +279,56 @@ class TestSplitArticle:
             _make_article(self._lines(4), [3, 3, 4, 5]), max_chars=21, overlap_chars=0
         )
         assert [(chunk.page_start, chunk.page_end) for chunk in result] == [(3, 3), (4, 5)]
+
+
+class TestHistorique:
+    """Tests du retrait des lignes d'historique Légifrance (via split_into_articles)."""
+
+    @staticmethod
+    def _article(*body: str) -> Article:
+        """Découpe un document d'un seul article dont le contenu est `body`."""
+        text = "\n".join(["Article GN 1", "VERSION EN VIGUEUR DEPUIS LE 01/01/2020", *body])
+        (article,) = split_into_articles(_single_page(text))
+        return article
+
+    def test_ligne_modifie_par_deplacee_dans_history(self) -> None:
+        """Une ligne "Modifié par" quitte le texte et passe dans history."""
+        article = self._article(
+            "Modifié par Arrêté du 7 février 2022 - art. 3",
+            "Classement des établissements",
+        )
+        assert article.history == ("Modifié par Arrêté du 7 février 2022 - art. 3",)
+        assert article.text == "Classement des établissements"
+        assert article.line_pages == (1,)
+
+    def test_plusieurs_lignes_d_historique(self) -> None:
+        """Toutes les lignes d'historique consécutives en tête sont captées."""
+        article = self._article(
+            "Création Arrêté du 4 juin 1982 (V)",
+            "Modifié par Arrêté du 10 octobre 2005 - art. Annexe, v. init.",
+            "Transféré par Arrêté du 11 décembre 2009 - art.",
+            "Texte réglementaire.",
+        )
+        assert len(article.history) == 3
+        assert article.text == "Texte réglementaire."
+
+    def test_ligne_coupee_recollee(self) -> None:
+        """Une parenthèse ouverte en fin de ligne est refermée par la ligne suivante."""
+        article = self._article(
+            "Modifié par Arrêté du 23 décembre 1996 - art. Annexe, v. init. (en dernier",
+            "lieu)",
+            "Texte réglementaire.",
+        )
+        assert article.history == (
+            "Modifié par Arrêté du 23 décembre 1996 - art. Annexe, v. init. (en dernier lieu)",
+        )
+        assert article.text == "Texte réglementaire."
+
+    def test_ligne_creation_au_milieu_non_touchee(self) -> None:
+        """Une ligne commençant par "Création" au milieu du texte est conservée."""
+        article = self._article(
+            "Les exploitants doivent prévoir :",
+            "Création d'un registre de sécurité.",
+        )
+        assert article.history == ()
+        assert "Création d'un registre de sécurité." in article.text
