@@ -16,6 +16,8 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    for name in ("USER", "PASSWORD", "DB", "HOST", "PORT"):
+        monkeypatch.delenv(f"POSTGRES_{name}", raising=False)
     get_settings.cache_clear()
     yield tmp_path
     get_settings.cache_clear()
@@ -60,3 +62,26 @@ def test_env_var_overrides_env_file(isolated_env: Path, monkeypatch: pytest.Monk
 def test_get_settings_is_cached() -> None:
     """get_settings() renvoie toujours la même instance."""
     assert get_settings() is get_settings()
+
+
+def test_postgres_defaults_sans_mot_de_passe() -> None:
+    """Sans configuration, la base a des valeurs par défaut mais pas de mot de passe."""
+    settings = Settings()
+
+    assert settings.postgres_host == "127.0.0.1"
+    assert settings.postgres_port == 5432
+    assert settings.postgres_password is None
+
+
+def test_postgres_password_masque(isolated_env: Path) -> None:
+    """Le mot de passe est lu depuis .env mais n'apparaît jamais à l'affichage."""
+    (isolated_env / ".env").write_text(
+        "POSTGRES_PASSWORD=secret-de-test\nPOSTGRES_PORT=5433\n", encoding="utf-8"
+    )
+
+    settings = Settings()
+
+    assert settings.postgres_password is not None
+    assert settings.postgres_password.get_secret_value() == "secret-de-test"
+    assert "secret-de-test" not in repr(settings)
+    assert settings.postgres_port == 5433

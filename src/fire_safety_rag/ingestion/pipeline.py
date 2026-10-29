@@ -64,13 +64,42 @@ def is_in_force(article: Article, reference_date: date) -> bool:
     return article.valid_until is None or reference_date < article.valid_until
 
 
+def chunk_document(pdf_path: Path, document_id: str, reference_date: date) -> list[Chunk]:
+    """Découpe un document PDF en chunks.
+
+    Extraction des pages, découpage en articles, exclusion des articles qui ne
+    sont plus en vigueur à `reference_date`, puis découpage de chaque article
+    restant en chunks. Des statistiques sont journalisées au niveau INFO.
+
+    Args:
+        pdf_path: chemin du fichier PDF.
+        document_id: identifiant du document dans le catalogue.
+        reference_date: date à laquelle on évalue la vigueur des articles.
+
+    Returns:
+        Chunks du document, dans l'ordre du document.
+    """
+    pages = list(extract_pages(pdf_path, document_id))
+    articles = split_into_articles(pages)
+    in_force = [article for article in articles if is_in_force(article, reference_date)]
+    chunks = [chunk for article in in_force for chunk in split_article(article)]
+    sizes = [len(chunk.text) for chunk in chunks]
+    logger.info(
+        "%s : %d pages, %d articles (%d exclus car plus en vigueur), "
+        "%d chunks (taille médiane %d, max %d)",
+        document_id,
+        len(pages),
+        len(articles),
+        len(articles) - len(in_force),
+        len(chunks),
+        statistics.median(sizes) if sizes else 0,
+        max(sizes, default=0),
+    )
+    return chunks
+
+
 def chunk_corpus(catalogue_path: Path, raw_dir: Path, reference_date: date) -> list[Chunk]:
     """Découpe en chunks tous les documents listés dans le catalogue.
-
-    Pour chaque document : extraction des pages, découpage en articles,
-    exclusion des articles qui ne sont plus en vigueur à `reference_date`,
-    puis découpage de chaque article restant en chunks. Des statistiques par
-    document sont journalisées au niveau INFO.
 
     Args:
         catalogue_path: chemin du catalogue des sources (CSV).
@@ -82,24 +111,7 @@ def chunk_corpus(catalogue_path: Path, raw_dir: Path, reference_date: date) -> l
     """
     chunks: list[Chunk] = []
     for entry in load_catalogue(catalogue_path):
-        document_id = entry["id"]
-        pages = list(extract_pages(raw_dir / entry["fichier"], document_id))
-        articles = split_into_articles(pages)
-        in_force = [article for article in articles if is_in_force(article, reference_date)]
-        document_chunks = [chunk for article in in_force for chunk in split_article(article)]
-        sizes = [len(chunk.text) for chunk in document_chunks]
-        logger.info(
-            "%s : %d pages, %d articles (%d exclus car plus en vigueur), "
-            "%d chunks (taille médiane %d, max %d)",
-            document_id,
-            len(pages),
-            len(articles),
-            len(articles) - len(in_force),
-            len(document_chunks),
-            statistics.median(sizes) if sizes else 0,
-            max(sizes, default=0),
-        )
-        chunks.extend(document_chunks)
+        chunks.extend(chunk_document(raw_dir / entry["fichier"], entry["id"], reference_date))
     return chunks
 
 
