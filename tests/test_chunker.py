@@ -140,6 +140,41 @@ class TestSplitIntoArticles:
         """Un texte sans titre d'article renvoie une liste vide."""
         assert split_into_articles(_single_page("Sommaire\nChapitre VII")) == []
 
+    def test_annexe_separee_de_l_article_precedent(self) -> None:
+        """Une annexe forme sa propre unité au lieu d'allonger l'article précédent."""
+        text = (
+            "Article 17\n"
+            "VERSION EN VIGUEUR DEPUIS LE 10/07/2024\n"
+            "Le présent arrêté sera publié au Journal officiel.\n"
+            "Annexes (Articles Annexe I à Annexe XIII)\n"
+            "Annexe I\n"
+            "VERSION EN VIGUEUR DEPUIS LE 10/07/2024\n"
+            "Contenu de l'annexe I."
+        )
+        result = split_into_articles(_single_page(text))
+        assert [article.article_id for article in result] == ["17", "Annexe I"]
+        assert "Contenu de l'annexe I." not in result[0].text
+        assert result[1].text == "Contenu de l'annexe I."
+
+    def test_annexe_rattachee_a_un_article(self) -> None:
+        """Un titre "Annexe à l'article PO 11" est reconnu tel quel."""
+        text = (
+            "Annexe à l'article PO 11\n"
+            "VERSION EN VIGUEUR DEPUIS LE 30/10/2011\n"
+            "Tableau des distances."
+        )
+        result = split_into_articles(_single_page(text))
+        assert [article.article_id for article in result] == ["Annexe à l'article PO 11"]
+
+    def test_sommaire_des_annexes_ignore(self) -> None:
+        """La ligne de sommaire "Annexes (...)" n'est jamais un titre."""
+        text = (
+            "Annexes (Articles Annexe I à Annexe V)\n"
+            "VERSION EN VIGUEUR DEPUIS LE 22/06/2011\n"
+            "Texte."
+        )
+        assert split_into_articles(_single_page(text)) == []
+
     def test_aucune_page(self) -> None:
         """Une liste de pages vide renvoie une liste vide."""
         assert split_into_articles([]) == []
