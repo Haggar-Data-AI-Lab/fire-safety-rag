@@ -1,0 +1,30 @@
+id,question,expected,note
+q01,"Dans un bureau de 150 salariés, combien de sorties faut-il et quelle largeur totale ?",code-travail-r4227-incendie:R4227-5,tableau effectif / nombre / largeur
+q02,Les portes de secours doivent-elles s'ouvrir vers l'extérieur ?,code-travail-r4227-incendie:R4227-6,plus de 50 personnes : sens de la sortie
+q03,Combien d'extincteurs faut-il prévoir dans des locaux de travail ?,code-travail-r4227-incendie:R4227-29,1 pour 200 m² et 1 par niveau
+q04,À partir de combien de personnes une alarme incendie est-elle obligatoire au travail ?,code-travail-r4227-incendie:R4227-34,plus de 50 personnes
+q05,À quelle fréquence faut-il faire des exercices incendie avec les salariés ?,code-travail-r4227-incendie:R4227-39,au moins tous les six mois
+q06,Faut-il une rampe des deux côtés d'un escalier ?,code-travail-r4227-incendie:R4227-10,largeur d'au moins 1,5 m
+q07,Peut-on chauffer un atelier avec un combustible liquide très inflammable ?,code-travail-r4227-incendie:R4227-16,point éclair inférieur à 55 °C interdit
+q08,Qu'est-ce qu'une atmosphère explosive ?,code-travail-r4227-incendie:R4227-43,définition
+q09,Quelles sont les missions d'un agent de sécurité incendie SSIAP 1 ?,arrete-2005-05-02-ssiap:2;arrete-2005-05-02-ssiap:Annexe I,missions listées à l'article 2 et détaillées en annexe I
+q10,Quel diplôme faut-il pour être chef d'équipe de sécurité incendie ?,arrete-2005-05-02-ssiap:3,SSIAP 2
+q11,Tous les combien un agent SSIAP doit-il faire son recyclage ?,arrete-2005-05-02-ssiap:7,triennal (secourisme tous les deux ans)
+q12,Combien d'heures dure la formation SSIAP 1 ?,arrete-2005-05-02-ssiap:Annexe II,67 heures
+q13,Faut-il un certificat médical pour suivre une formation SSIAP ?,arrete-2005-05-02-ssiap:Annexe VII,certificat de moins de trois mois
+q14,Comment se déroule l'examen du SSIAP 1 ?,arrete-2005-05-02-ssiap:Annexe IX,QCM de 30 questions + épreuves
+q15,Un centre de formation SSIAP doit-il être agréé ?,arrete-2005-05-02-ssiap:12,agrément obligatoire
+q16,Un détecteur de fumée est-il obligatoire dans un logement ?,cch-r141-r146-securite-incendie:R142-2,au moins un par logement
+q17,"Qui doit installer et entretenir le détecteur de fumée, le propriétaire ou le locataire ?",cch-r141-r146-securite-incendie:R142-3,installation propriétaire / entretien occupant
+q18,Qu'est-ce qu'un établissement recevant du public ?,cch-r141-r146-securite-incendie:R143-2,définition
+q19,Comment détermine-t-on la catégorie d'un ERP ?,cch-r141-r146-securite-incendie:R143-19,d'après l'effectif du public et du personnel
+q20,Qui autorise l'ouverture d'un ERP au public ?,cch-r141-r146-securite-incendie:R143-39,le maire après avis de la commission
+q21,À partir de quelle hauteur un immeuble d'habitation devient-il un IGH ?,cch-r141-r146-securite-incendie:R146-3,plus de 50 m pour l'habitation
+q22,Que doit contenir le registre de sécurité d'un ERP ?,cch-r141-r146-securite-incendie:R143-44;cch-r141-r146-securite-incendie:R141-10,R143-44 renvoie à R141-10
+q23,"Quels sont les différents types d'ERP (magasins, restaurants, hôtels...) ?",arrete-1980-06-25-reglement-securite-erp:GN 1;cch-r141-r146-securite-incendie:R143-18,liste des types en GN 1
+q24,À quoi sert le désenfumage ?,arrete-1980-06-25-reglement-securite-erp:DF 1,objet du désenfumage
+q25,Quels moyens d'extinction un ERP doit-il avoir ?,arrete-1980-06-25-reglement-securite-erp:MS 38,extincteurs portatifs / sur roues / seaux
+q26,Tous les combien la commission de sécurité visite-t-elle un ERP ?,arrete-1980-06-25-reglement-securite-erp:GE 4;cch-r141-r146-securite-incendie:R143-41,périodicité selon type et catégorie
+q27,À quoi sert l'éclairage de sécurité dans un ERP ?,arrete-1980-06-25-reglement-securite-erp:EC 8,évacuation + ambiance / anti-panique
+q28,"Dans une école, quand doit avoir lieu le premier exercice d'évacuation ?",arrete-1980-06-25-reglement-securite-erp:R 33,dans le mois qui suit la rentrée
+q29,"Dans une maison de retraite, à quelle fréquence le personnel fait-il des exercices incendie ?",arrete-1980-06-25-reglement-securite-erp:J 39,au moins une fois par semestre
