@@ -66,7 +66,7 @@ Comportement attendu :
 
 - Python 3.11+ avec environnement virtuel `.venv`.
 - PostgreSQL + pgvector (via Docker).
-- Modèle d'embeddings : à évaluer, de préférence un modèle open source multilingue exécuté en local (gratuit).
+- Modèle d'embeddings : `intfloat/multilingual-e5-base` (open source, licence MIT, multilingue, 768 dimensions), exécuté en local via `sentence-transformers`. Isolé derrière deux fonctions (`embed_passages`, `embed_query`) pour pouvoir le comparer plus tard à une API.
 - LLM : API d'un fournisseur (par exemple Claude), modèle économique pour le développement.
 - FastAPI, Streamlit, pytest.
 - Orchestration (Prefect) seulement si utile, après la première version.
@@ -93,15 +93,20 @@ fire-safety-rag/
 ├── db/init/                # scripts SQL exécutés au premier démarrage
 ├── data/
 │   ├── sources.csv         # catalogue du corpus (versionné)
+│   ├── eval/questions.csv  # jeu de questions d'évaluation (versionné)
 │   ├── raw/                # documents sources (non versionnés)
 │   └── processed/          # données produites (non versionnées)
 ├── src/fire_safety_rag/
 │   ├── config.py
-│   └── ingestion/          # extraction du texte des PDF
+│   ├── ingestion/          # extraction, découpage en articles et en chunks
+│   ├── embedding/          # vectorisation (modèle local)
+│   ├── storage/            # PostgreSQL : connexion, schéma, écriture, recherche
+│   ├── indexing/           # indexation du corpus avec empreinte par document
+│   └── evaluation/         # métriques et script d'évaluation de la recherche
 └── tests/
 ```
 
-À venir, au fil des phases : modules `retrieval/`, `generation/`, `evaluation/` et `api/` dans `src/fire_safety_rag/`, interface Streamlit dans `app/`, jeu de questions dans `eval/`, journaux dans `logs/` (non versionnés).
+À venir, au fil des phases : modules `generation/` et `api/` dans `src/fire_safety_rag/`, interface Streamlit dans `app/`, journaux dans `logs/` (non versionnés).
 
 ## 7. Sécurité et bonnes pratiques
 
@@ -119,10 +124,10 @@ fire-safety-rag/
 
 ## 9. Plan de développement
 
-- **Phase 0 — Socle :** dépôt, `.venv`, structure, configuration, premier test, GitHub Actions.
-- **Phase 1 — Ingestion :** extraction, découpage, métadonnées, hash, stockage pgvector, logs.
+- **Phase 0 — Socle :** dépôt, `.venv`, structure, configuration, premier test, GitHub Actions. ✅
+- **Phase 1 — Ingestion :** extraction, découpage, métadonnées, hash, stockage pgvector, logs. ✅
 - **Phase 2 — RAG minimal :** question → passages → réponse avec citations, en ligne de commande.
-- **Phase 3 — Évaluation :** jeu de questions, script de mesure, premiers résultats chiffrés.
+- **Phase 3 — Évaluation :** jeu de questions, script de mesure, premiers résultats chiffrés. 🔄 Évaluation de la *recherche* avancée avant la Phase 2 : la qualité des passages retrouvés conditionne celle des réponses, autant la mesurer et l'améliorer d'abord. Référence actuelle (29 questions) : Hit@5 = 0,59, MRR = 0,44. L'évaluation des *réponses* (fidélité, refus justifiés) viendra avec la Phase 2.
 - **Phase 4 — Interfaces :** API FastAPI, interface Streamlit.
 - **Phase 5 — Industrialisation :** Docker, README complet, démo en ligne.
 - **Phase 6 — Valorisation :** ligne de CV, post LinkedIn, préparation de la démo pour les entretiens.
