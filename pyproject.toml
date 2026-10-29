@@ -48,3 +48,9 @@ strict = true
 mypy_path = "src"
 files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
+
+# sentence-transformers est optionnel (extra "embeddings") et absent de la CI :
+# sans cette règle, mypy y échouerait sur "module introuvable".
+[[tool.mypy.overrides]]
+module = ["sentence_transformers", "sentence_transformers.*"]
+ignore_missing_imports = true
