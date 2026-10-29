@@ -1,7 +1,10 @@
 """Découpage du texte des documents du corpus en articles réglementaires."""
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from fire_safety_rag.ingestion.pdf_extractor import PageText
 
 # ---------------------------------------------------------------------------
 # Expressions régulières pour la détection des titres d'articles
@@ -42,12 +45,17 @@ class Article:
             actuelles des versions abrogées.
         text: contenu de l'article, sans la ligne de titre ni la ligne de
             version.
+        page_start: page du PDF où se trouve le titre de l'article.
+        page_end: page du PDF où se trouve la dernière ligne non vide de
+            l'article.
     """
 
     document_id: str
     article_id: str
     version: str
     text: str
+    page_start: int
+    page_end: int
 
 
 # ---------------------------------------------------------------------------
@@ -72,26 +80,37 @@ def _next_non_empty(lines: list[str], start: int) -> int | None:
     return None
 
 
-def split_into_articles(text: str, document_id: str) -> list[Article]:
-    """Découpe le texte d'un document en articles réglementaires.
+def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
+    """Découpe les pages d'un document en articles réglementaires.
 
     Une ligne est un titre d'article si elle correspond à "Article <identifiant>"
     ET si la ligne non vide suivante commence par "VERSION EN VIGUEUR".
     Le contenu d'un article va de la ligne qui suit sa version jusqu'au titre
-    de l'article suivant (ou jusqu'à la fin du texte).
+    de l'article suivant (ou jusqu'à la fin du document), même s'il s'étend
+    sur plusieurs pages.
 
     Le texte situé avant le premier article (titre du document, sommaire)
     est ignoré.
 
     Args:
-        text: texte complet et nettoyé d'un document.
-        document_id: identifiant unique du document dans le corpus.
+        pages: pages nettoyées d'un SEUL document, dans l'ordre. Le
+            document_id des articles est lu sur la première page.
 
     Returns:
         Articles dans l'ordre du document ; liste vide si aucun titre
         d'article n'est détecté.
     """
-    lines = [line.strip() for line in text.splitlines()]
+    if not pages:
+        return []
+    document_id = pages[0].document_id
+
+    # Listes parallèles : chaque ligne et le numéro de la page d'où elle vient
+    lines: list[str] = []
+    line_pages: list[int] = []
+    for page in pages:
+        for line in page.text.splitlines():
+            lines.append(line.strip())
+            line_pages.append(page.page_number)
 
     # Repérage des titres : (indice du titre, identifiant, indice de la version)
     headings: list[tuple[int, str, int]] = []
@@ -105,15 +124,25 @@ def split_into_articles(text: str, document_id: str) -> list[Article]:
 
     # Construction des articles : le contenu s'arrête au titre suivant
     articles: list[Article] = []
-    for position, (_, article_id, version_index) in enumerate(headings):
+    for position, (heading_index, article_id, version_index) in enumerate(headings):
         end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
         body = "\n".join(lines[version_index + 1 : end]).strip()
+
+        # Dernière ligne non vide de l'article (au minimum, sa ligne de version)
+        last_index = version_index
+        for index in range(end - 1, version_index, -1):
+            if lines[index]:
+                last_index = index
+                break
+
         articles.append(
             Article(
                 document_id=document_id,
                 article_id=article_id,
                 version=lines[version_index],
                 text=body,
+                page_start=line_pages[heading_index],
+                page_end=line_pages[last_index],
             )
         )
     return articles
