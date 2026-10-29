@@ -11,6 +11,8 @@ license = "MIT"
 authors = [{ name = "Hissein Haggar SENOUSSI" }]
 requires-python = ">=3.11"
 dependencies = [
+    "pgvector>=0.5,<0.6",
+    "psycopg[binary]>=3.3,<3.4",
     "pydantic-settings>=2.0",
     "pypdf>=5.0",
 ]

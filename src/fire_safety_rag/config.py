@@ -3,6 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,16 @@ class Settings(BaseSettings):
     # Modèle d'embedding Hugging Face. Changer de modèle impose de revectoriser
     # tout le corpus : les vecteurs de deux modèles ne sont pas comparables.
     embedding_model: str = "intfloat/multilingual-e5-base"
+
+    # Base PostgreSQL (mêmes variables que docker-compose.yml). Le mot de passe
+    # n'a pas de valeur par défaut : il n'est exigé qu'à la connexion, pour que
+    # le reste du projet fonctionne sans base. SecretStr le masque dans les
+    # affichages et les logs ("**********").
+    postgres_user: str = "fire_user"
+    postgres_password: SecretStr | None = None
+    postgres_db: str = "fire_safety"
+    postgres_host: str = "127.0.0.1"
+    postgres_port: int = 5432
 
 
 @lru_cache
