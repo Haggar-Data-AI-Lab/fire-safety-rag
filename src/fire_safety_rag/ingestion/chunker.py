@@ -3,6 +3,7 @@
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date, datetime
 
 from fire_safety_rag.ingestion.pdf_extractor import PageText
 
@@ -22,10 +23,18 @@ from fire_safety_rag.ingestion.pdf_extractor import PageText
 _RE_ARTICLE_HEADING: re.Pattern[str] = re.compile(r"^Article\s+(\S+(?: \S+){0,2})$")
 
 # Début de la ligne qui suit TOUJOURS un vrai titre d'article Légifrance.
-# Exemples observés :
-#   "VERSION EN VIGUEUR DEPUIS LE 01/05/2008"
-#   "VERSION EN VIGUEUR DU 12/08/1982 AU 07/0..."  (version non actuelle)
 _VERSION_PREFIX = "VERSION EN VIGUEUR"
+
+# Ligne de version complète : seuls deux formats ont été observés sur le corpus.
+# Exemples :
+#   "VERSION EN VIGUEUR DEPUIS LE 01/05/2008"         (sans date de fin)
+#   "VERSION EN VIGUEUR DU 15/08/1980 AU 01/06/2027"  (date de fin, passée
+#                                                      = abrogé, future = fin
+#                                                      programmée)
+_RE_VERSION: re.Pattern[str] = re.compile(
+    r"^VERSION EN VIGUEUR (?:DEPUIS LE (\d{2}/\d{2}/\d{4})"
+    r"|DU (\d{2}/\d{2}/\d{4}) AU (\d{2}/\d{2}/\d{4}))$"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -41,8 +50,10 @@ class Article:
         document_id: identifiant unique du document dans le corpus.
         article_id: identifiant de l'article (ex. "R4227-4", "CTS 31 bis").
         version: ligne de version Légifrance (ex. "VERSION EN VIGUEUR DEPUIS
-            LE 01/05/2008"), conservée pour distinguer plus tard les versions
-            actuelles des versions abrogées.
+            LE 01/05/2008").
+        valid_from: date de début de vigueur, lue dans `version`.
+        valid_until: date de fin de vigueur, lue dans `version` ; None si
+            l'article est en vigueur sans date de fin.
         text: contenu de l'article, sans la ligne de titre ni la ligne de
             version.
         page_start: page du PDF où se trouve le titre de l'article.
@@ -56,6 +67,8 @@ class Article:
     document_id: str
     article_id: str
     version: str
+    valid_from: date
+    valid_until: date | None
     text: str
     page_start: int
     page_end: int
@@ -73,6 +86,8 @@ class Chunk:
         document_id: identifiant unique du document dans le corpus.
         article_id: identifiant de l'article d'origine.
         version: ligne de version Légifrance de l'article d'origine.
+        valid_from: date de début de vigueur de l'article d'origine.
+        valid_until: date de fin de vigueur de l'article d'origine, ou None.
         chunk_index: position du morceau dans l'article, en commençant à 0.
         text: contenu du morceau.
         page_start: page du PDF de la première ligne du morceau.
@@ -82,6 +97,8 @@ class Chunk:
     document_id: str
     article_id: str
     version: str
+    valid_from: date
+    valid_until: date | None
     chunk_index: int
     text: str
     page_start: int
@@ -91,6 +108,35 @@ class Chunk:
 # ---------------------------------------------------------------------------
 # Fonctions
 # ---------------------------------------------------------------------------
+
+
+def _parse_date(text: str) -> date:
+    """Convertit une date au format JJ/MM/AAAA en objet date."""
+    return datetime.strptime(text, "%d/%m/%Y").date()
+
+
+def parse_version(line: str) -> tuple[date, date | None]:
+    """Lit les dates de vigueur dans une ligne de version Légifrance.
+
+    Args:
+        line: ligne de version, ex. "VERSION EN VIGUEUR DEPUIS LE 01/05/2008"
+            ou "VERSION EN VIGUEUR DU 15/08/1980 AU 01/06/2027".
+
+    Returns:
+        Couple (date de début, date de fin) ; la date de fin vaut None pour
+        le format "DEPUIS LE".
+
+    Raises:
+        ValueError: si la ligne ne correspond à aucun format connu (on
+            préfère échouer plutôt que d'indexer un article mal daté).
+    """
+    match = _RE_VERSION.match(line)
+    if match is None:
+        raise ValueError(f"Ligne de version non reconnue : {line!r}")
+    since, start, end = match.groups()
+    if since is not None:
+        return _parse_date(since), None
+    return _parse_date(start), _parse_date(end)
 
 
 def _next_non_empty(lines: list[str], start: int) -> int | None:
@@ -167,12 +213,15 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
 
         # Dernière ligne non vide de l'article (au minimum, sa ligne de version)
         last_index = end - 1 if end > start else version_index
+        valid_from, valid_until = parse_version(lines[version_index])
 
         articles.append(
             Article(
                 document_id=document_id,
                 article_id=article_id,
                 version=lines[version_index],
+                valid_from=valid_from,
+                valid_until=valid_until,
                 text="\n".join(lines[start:end]),
                 page_start=line_pages[heading_index],
                 page_end=line_pages[last_index],
@@ -222,6 +271,8 @@ def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 
                 document_id=article.document_id,
                 article_id=article.article_id,
                 version=article.version,
+                valid_from=article.valid_from,
+                valid_until=article.valid_until,
                 chunk_index=0,
                 text=article.text,
                 page_start=article.page_start,
@@ -258,6 +309,8 @@ def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 
                 document_id=article.document_id,
                 article_id=article.article_id,
                 version=article.version,
+                valid_from=article.valid_from,
+                valid_until=article.valid_until,
                 chunk_index=len(chunks),
                 text="\n".join(lines[start:end]),
                 page_start=article.line_pages[start],
