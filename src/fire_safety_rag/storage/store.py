@@ -79,6 +79,26 @@ def _check_vectors(chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) 
             )
 
 
+def get_indexed_document(
+    connection: psycopg.Connection[tuple[Any, ...]], document_id: str
+) -> tuple[str, str] | None:
+    """Renvoie l'empreinte et le modèle d'un document déjà indexé.
+
+    Args:
+        connection: connexion ouverte (voir storage.database.connect).
+        document_id: identifiant du document dans le catalogue.
+
+    Returns:
+        Couple (content_hash, embedding_model), ou None si le document n'est
+        pas en base.
+    """
+    row = connection.execute(
+        "SELECT content_hash, embedding_model FROM documents WHERE document_id = %s",
+        (document_id,),
+    ).fetchone()
+    return None if row is None else (row[0], row[1])
+
+
 def replace_document(
     connection: psycopg.Connection[tuple[Any, ...]],
     document_id: str,

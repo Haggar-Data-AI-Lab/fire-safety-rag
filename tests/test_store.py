@@ -15,7 +15,7 @@ import pytest
 
 from fire_safety_rag.ingestion.chunker import Chunk
 from fire_safety_rag.storage.schema import EMBEDDING_DIMENSION, init_schema
-from fire_safety_rag.storage.store import replace_document, search
+from fire_safety_rag.storage.store import get_indexed_document, replace_document, search
 
 Connection = psycopg.Connection[tuple[Any, ...]]
 MODEL = "modele-de-test"
@@ -119,3 +119,11 @@ class TestAvecBase:
         replace_document(db, "doc-test", "hash", "autre-modele", [_chunk(0)], [_unit_vector(0)])
 
         assert search(db, _unit_vector(0), MODEL, k=5) == []
+
+    def test_get_indexed_document(self, db: Connection) -> None:
+        """get_indexed_document renvoie None, puis (empreinte, modèle) après écriture."""
+        assert get_indexed_document(db, "doc-test") is None
+
+        replace_document(db, "doc-test", "hash-1", MODEL, [_chunk(0)], [_unit_vector(0)])
+
+        assert get_indexed_document(db, "doc-test") == ("hash-1", MODEL)
