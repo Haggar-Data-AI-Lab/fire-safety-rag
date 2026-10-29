@@ -21,6 +21,12 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.10",
 ]
+# Calcul local des embeddings (installe PyTorch, lourd) : volontairement séparé
+# des dépendances principales pour que la CI reste légère.
+# 6.1 plutôt que 6.2, publiée le 2026-10-21 et encore trop récente.
+embeddings = [
+    "sentence-transformers>=6.1,<6.2",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -42,3 +48,9 @@ strict = true
 mypy_path = "src"
 files = ["src", "tests"]
 plugins = ["pydantic.mypy"]
+
+# sentence-transformers est optionnel (extra "embeddings") et absent de la CI :
+# sans cette règle, mypy y échouerait sur "module introuvable".
+[[tool.mypy.overrides]]
+module = ["sentence_transformers", "sentence_transformers.*"]
+ignore_missing_imports = true

@@ -15,6 +15,7 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
     get_settings.cache_clear()
     yield tmp_path
     get_settings.cache_clear()
@@ -26,6 +27,7 @@ def test_defaults_without_env_file() -> None:
 
     assert settings.app_env == "dev"
     assert settings.log_level == "INFO"
+    assert settings.embedding_model == "intfloat/multilingual-e5-base"
 
 
 def test_reads_env_file(isolated_env: Path) -> None:

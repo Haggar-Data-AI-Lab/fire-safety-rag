@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     app_env: Literal["dev", "test", "prod"] = "dev"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Modèle d'embedding Hugging Face. Changer de modèle impose de revectoriser
+    # tout le corpus : les vecteurs de deux modèles ne sont pas comparables.
+    embedding_model: str = "intfloat/multilingual-e5-base"
 
 
 @lru_cache
