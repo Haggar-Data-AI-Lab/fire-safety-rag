@@ -31,8 +31,11 @@ def test_file_sha256(tmp_path: Path) -> None:
     assert file_sha256(path) == ("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
 
 
-def _fake_embed(chunks: Sequence[Chunk]) -> list[list[float]]:
-    """Faux embedder : le même vecteur unitaire pour chaque chunk."""
+CODE_TRAVAIL_TITLE = "Code du travail – incendie"
+
+
+def _fake_embed(chunks: Sequence[Chunk], document_title: str) -> list[list[float]]:
+    """Faux embedder : le même vecteur unitaire pour chaque chunk (titre ignoré)."""
     vector = [0.0] * EMBEDDING_DIMENSION
     vector[0] = 1.0
     return [vector for _ in chunks]
@@ -57,7 +60,9 @@ class TestIndexCorpus:
         """Catalogue limité au Code du travail."""
         path = tmp_path / "sources.csv"
         path.write_text(
-            f"id,fichier\n{CODE_TRAVAIL_ID},{CODE_TRAVAIL_PDF.name}\n", encoding="utf-8"
+            f"id,titre_court,fichier\n"
+            f"{CODE_TRAVAIL_ID},{CODE_TRAVAIL_TITLE},{CODE_TRAVAIL_PDF.name}\n",
+            encoding="utf-8",
         )
         return path
 
@@ -75,6 +80,17 @@ class TestIndexCorpus:
             "SELECT count(*) FROM chunks WHERE document_id = %s", (CODE_TRAVAIL_ID,)
         ).fetchone()
         assert row == (57,)
+
+    def test_titre_court_transmis(self, db: Connection, catalogue: Path) -> None:
+        """L'embedder reçoit le titre court du document lu dans le catalogue."""
+        titles: list[str] = []
+
+        def recording_embed(chunks: Sequence[Chunk], document_title: str) -> list[list[float]]:
+            titles.append(document_title)
+            return _fake_embed(chunks, document_title)
+
+        index_corpus(db, catalogue, DATA_RAW, recording_embed, "modele-a", date(2026, 10, 19))
+        assert titles == [CODE_TRAVAIL_TITLE]
 
     def test_deuxieme_passage_saute(self, db: Connection, catalogue: Path) -> None:
         """Un document inchangé, avec le même modèle, est sauté."""
