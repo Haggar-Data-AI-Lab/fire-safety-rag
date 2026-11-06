@@ -5,8 +5,9 @@ la base contient déjà ce document avec la même empreinte et le même modèle
 d'embedding, il est sauté (ni extraction ni vectorisation). Sinon, il est
 découpé, vectorisé, puis remplacé en base en une transaction.
 
-Limite : modifier le code du découpage sans changer le PDF ne change pas
-l'empreinte. Utiliser alors --force pour tout réindexer.
+Limite : modifier le code du découpage, le format de l'en-tête des chunks ou
+le titre court du catalogue sans changer le PDF ne change pas l'empreinte.
+Utiliser alors --force pour tout réindexer.
 
 Utilisation :
     python -m fire_safety_rag.indexing.indexer [--force]
@@ -38,9 +39,10 @@ from fire_safety_rag.storage.store import get_indexed_document, replace_document
 
 logger = logging.getLogger(__name__)
 
-# Fonction de vectorisation : embed_passages en usage réel, une fausse
-# fonction dans les tests (pas besoin du modèle de 1 Go).
-EmbedFunction = Callable[[Sequence[Chunk]], list[list[float]]]
+# Fonction de vectorisation (chunks d'un document, titre court du document) :
+# embed_passages en usage réel, une fausse fonction dans les tests (pas besoin
+# du modèle de 1 Go).
+EmbedFunction = Callable[[Sequence[Chunk], str], list[list[float]]]
 
 
 def file_sha256(path: Path, block_size: int = 1 << 20) -> str:
@@ -75,7 +77,8 @@ def index_corpus(
         connection: connexion ouverte, avec le schéma créé (init_schema).
         catalogue_path: chemin du catalogue des sources (CSV).
         raw_dir: dossier contenant les fichiers PDF du corpus.
-        embed: fonction qui vectorise une liste de chunks.
+        embed: fonction qui vectorise les chunks d'un document, à partir des
+            chunks et du titre court du document (colonne titre_court).
         embedding_model: nom du modèle utilisé par `embed`, enregistré en base.
         reference_date: date à laquelle on évalue la vigueur des articles.
         force: si True, réindexe même les documents inchangés.
@@ -99,7 +102,7 @@ def index_corpus(
 
         start = time.perf_counter()
         chunks = chunk_document(pdf_path, document_id, reference_date)
-        vectors = embed(chunks)
+        vectors = embed(chunks, entry["titre_court"])
         replace_document(connection, document_id, content_hash, embedding_model, chunks, vectors)
         logger.info(
             "%s : %d chunks indexés en %.0f s",

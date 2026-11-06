@@ -12,6 +12,7 @@ RAW_DIR = ROOT / "data" / "raw"
 EXPECTED_COLUMNS = [
     "id",
     "titre",
+    "titre_court",
     "type",
     "theme",
     "url",
@@ -48,6 +49,12 @@ def test_ids_are_unique() -> None:
     ids = [row["id"] for row in read_catalogue()]
 
     assert len(ids) == len(set(ids))
+
+
+def test_short_titles_are_filled() -> None:
+    """Chaque document a un titre court non vide (utilisé dans l'en-tête des chunks)."""
+    for row in read_catalogue():
+        assert row["titre_court"].strip(), row["id"]
 
 
 def test_file_name_matches_id() -> None:

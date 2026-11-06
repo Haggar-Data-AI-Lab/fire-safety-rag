@@ -34,14 +34,18 @@ class TestFormat:
     """Tests des fonctions de mise en forme (sans modèle)."""
 
     def test_format_passage_article(self) -> None:
-        """Un article reçoit le préfixe e5 et l'en-tête "Article X"."""
+        """Un article reçoit le préfixe e5 et l'en-tête "<titre> — Article X"."""
         chunk = _chunk("GN 1", "Classement des établissements")
-        assert format_passage(chunk) == "passage: Article GN 1\nClassement des établissements"
+        assert format_passage(chunk, "Règlement ERP") == (
+            "passage: Règlement ERP — Article GN 1\nClassement des établissements"
+        )
 
     def test_format_passage_annexe(self) -> None:
         """Une annexe garde son titre tel quel, sans "Article" devant."""
         chunk = _chunk("Annexe I", "Contenu de l'annexe.")
-        assert format_passage(chunk) == "passage: Annexe I\nContenu de l'annexe."
+        assert format_passage(chunk, "Arrêté SSIAP") == (
+            "passage: Arrêté SSIAP — Annexe I\nContenu de l'annexe."
+        )
 
     def test_format_query(self) -> None:
         """Une question reçoit le préfixe e5 "query: "."""
@@ -61,7 +65,9 @@ class TestEmbeddingModel:
 
     def test_dimension_et_normalisation(self) -> None:
         """Les vecteurs font 768 dimensions et sont normalisés (norme 1)."""
-        (vector,) = embed_passages([_chunk("R4227-4", "Les dégagements sont toujours libres.")])
+        (vector,) = embed_passages(
+            [_chunk("R4227-4", "Les dégagements sont toujours libres.")], "Code du travail"
+        )
         assert len(vector) == 768
         assert math.isclose(math.sqrt(sum(x * x for x in vector)), 1.0, abs_tol=1e-3)
 
@@ -77,7 +83,8 @@ class TestEmbeddingModel:
                     "AM 13",
                     "Les rideaux de scènes doivent être en matériaux de catégorie M1.",
                 ),
-            ]
+            ],
+            "Document de test",
         )
         question = embed_query("Quelle est la largeur minimale d'un dégagement ?")
 

@@ -26,21 +26,24 @@ _PASSAGE_PREFIX = "passage: "
 _QUERY_PREFIX = "query: "
 
 
-def format_passage(chunk: Chunk) -> str:
+def format_passage(chunk: Chunk, document_title: str) -> str:
     """Construit le texte à vectoriser pour un chunk.
 
-    Format : préfixe e5, en-tête de l'article, puis le texte du chunk.
-    Exemples d'en-tête : "Article GN 1", "Annexe I".
+    Format : préfixe e5, en-tête (titre court du document + article), puis le
+    texte du chunk. Le titre du document aide le modèle à distinguer des
+    articles proches issus de textes différents (ex. Code du travail / ERP).
+    Exemple d'en-tête : "Règlement de sécurité incendie des ERP — Article GN 1".
 
     Args:
         chunk: chunk à vectoriser.
+        document_title: titre court du document (colonne titre_court du catalogue).
 
     Returns:
         Texte prêt à être passé au modèle.
     """
     is_annex = chunk.article_id.startswith("Annexe")
     heading = chunk.article_id if is_annex else f"Article {chunk.article_id}"
-    return f"{_PASSAGE_PREFIX}{heading}\n{chunk.text}"
+    return f"{_PASSAGE_PREFIX}{document_title} — {heading}\n{chunk.text}"
 
 
 def format_query(question: str) -> str:
@@ -74,11 +77,14 @@ def _load_model(model_name: str) -> "SentenceTransformer":
     return SentenceTransformer(model_name)
 
 
-def embed_passages(chunks: Sequence[Chunk], batch_size: int = 32) -> list[list[float]]:
-    """Calcule les vecteurs normalisés d'une liste de chunks.
+def embed_passages(
+    chunks: Sequence[Chunk], document_title: str, batch_size: int = 32
+) -> list[list[float]]:
+    """Calcule les vecteurs normalisés des chunks d'un même document.
 
     Args:
-        chunks: chunks à vectoriser.
+        chunks: chunks à vectoriser, tous issus du même document.
+        document_title: titre court du document, placé dans l'en-tête.
         batch_size: nombre de textes traités ensemble par le modèle.
 
     Returns:
@@ -86,7 +92,7 @@ def embed_passages(chunks: Sequence[Chunk], batch_size: int = 32) -> list[list[f
     """
     model = _load_model(get_settings().embedding_model)
     embeddings = model.encode(
-        [format_passage(chunk) for chunk in chunks],
+        [format_passage(chunk, document_title) for chunk in chunks],
         batch_size=batch_size,
         normalize_embeddings=True,
     )
