@@ -15,22 +15,29 @@ publics et en citant ses sources.
   dates de vigueur et historique), exclusion des articles abrogés.
 - ✅ **Indexation** : vectorisation locale (`intfloat/multilingual-e5-base`) et stockage
   dans PostgreSQL + pgvector, avec saut des documents inchangés (empreinte SHA-256).
-- ✅ **Évaluation de la recherche** : 29 questions, mesure de référence ci-dessous.
-- ⏳ À venir : amélioration de la recherche, génération des réponses avec citations
-  (LLM), API et interface.
+- ✅ **Évaluation de la recherche** : 29 questions, résultats ci-dessous.
+- 🔄 **Amélioration de la recherche** : une piste à la fois, mesurée à chaque fois.
+- ⏳ À venir : recherche hybride (mots-clés + vecteurs), génération des réponses avec
+  citations (LLM), API et interface.
 
 ## Résultats actuels (recherche seule)
 
-Mesure de référence sur 29 questions ([`data/eval/questions.csv`](data/eval/questions.csv)) :
+Mesures sur 29 questions ([`data/eval/questions.csv`](data/eval/questions.csv)),
+une seule modification par ligne :
 
-| Hit@1 | Hit@3 | Hit@5 | MRR |
-|---|---|---|---|
-| 0,34 | 0,52 | 0,59 | 0,44 |
+| Version | Hit@1 | Hit@3 | Hit@5 | MRR |
+|---|---|---|---|---|
+| Référence : en-tête « Article X » | 0,34 | 0,52 | 0,59 | 0,44 |
+| **+ titre court du document dans l'en-tête** | **0,41** | **0,62** | **0,66** | **0,52** |
 
 Hit@k : part des questions dont l'article attendu figure dans les k premiers résultats.
-MRR : moyenne de 1 / rang du premier bon résultat. Ces chiffres servent de point de
-départ pour mesurer chaque amélioration ; le jeu de questions est encore petit
-(une question = 3,4 points).
+MRR : moyenne de 1 / rang du premier bon résultat. Le jeu de questions est encore
+petit (une question = 3,4 points) : seuls des écarts nets et cohérents entre les
+métriques sont retenus.
+
+Principaux échecs restants : questions sur le Code du travail ou le Code de la
+construction captées par le règlement ERP (83 % des chunks), et articles SSIAP
+généraux (4, 5, 6) classés devant l'article ou l'annexe attendus.
 
 ## Démarrage rapide
 
@@ -67,7 +74,8 @@ Le corpus doit être présent dans `data/raw/` (voir ci-dessous) et la base dém
 python -m fire_safety_rag.ingestion.pipeline
 
 # 2. Indexer dans PostgreSQL (~10 min sur CPU la première fois ;
-#    les documents inchangés sont ensuite sautés, --force pour tout refaire)
+#    les documents inchangés sont ensuite sautés ; --force pour tout refaire,
+#    par exemple après une modification du découpage ou de data/sources.csv)
 python -m fire_safety_rag.indexing.indexer
 
 # 3. Mesurer la qualité de la recherche
