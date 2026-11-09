@@ -41,13 +41,15 @@ LIMIT %(k)s
 
 # plainto_tsquery exige tous les mots (ET) : trop strict pour une question en
 # langage courant. Remplacer & par | garde les chunks qui en partagent au moins un.
+# Le 1 de ts_rank divise le score par 1 + log(longueur) : sans lui, les longs
+# chunks dominent ; diviser par la longueur (2) favorise trop les chunks courts.
 _FULL_TEXT_SEARCH = """
 WITH q AS (
     SELECT replace(plainto_tsquery('french', %(question)s)::text, '&', '|')::tsquery AS query
 )
 SELECT c.document_id, c.article_id, c.version, c.valid_from, c.valid_until,
        c.history, c.chunk_index, c.text, c.page_start, c.page_end,
-       ts_rank(c.search_vector, q.query) AS rank
+       ts_rank(c.search_vector, q.query, 1) AS rank
 FROM chunks AS c
 JOIN documents AS d USING (document_id)
 CROSS JOIN q
