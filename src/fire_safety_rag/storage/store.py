@@ -39,6 +39,25 @@ ORDER BY distance
 LIMIT %(k)s
 """
 
+# plainto_tsquery exige tous les mots (ET) : trop strict pour une question en
+# langage courant. Remplacer & par | garde les chunks qui en partagent au moins un.
+_FULL_TEXT_SEARCH = """
+WITH q AS (
+    SELECT replace(plainto_tsquery('french', %(question)s)::text, '&', '|')::tsquery AS query
+)
+SELECT c.document_id, c.article_id, c.version, c.valid_from, c.valid_until,
+       c.history, c.chunk_index, c.text, c.page_start, c.page_end,
+       ts_rank(c.search_vector, q.query) AS rank
+FROM chunks AS c
+JOIN documents AS d USING (document_id)
+CROSS JOIN q
+WHERE d.embedding_model = %(model)s
+  AND (c.valid_until IS NULL OR c.valid_until > current_date)
+  AND c.search_vector @@ q.query
+ORDER BY rank DESC, c.document_id, c.position
+LIMIT %(k)s
+"""
+
 
 # ---------------------------------------------------------------------------
 # Structures de données
@@ -51,8 +70,9 @@ class SearchResult:
 
     Attributes:
         chunk: chunk retrouvé, avec ses métadonnées (pages, dates, historique).
-        score: similarité cosinus avec la question (1 - distance) ; plus il est
-            élevé, plus le chunk est proche. Seul l'ordre est significatif.
+        score: similarité cosinus (recherche vectorielle) ou ts_rank (plein
+            texte) ; plus il est élevé, mieux le chunk est classé. Seul l'ordre
+            est significatif : les deux échelles ne sont pas comparables.
     """
 
     chunk: Chunk
@@ -62,6 +82,22 @@ class SearchResult:
 # ---------------------------------------------------------------------------
 # Fonctions
 # ---------------------------------------------------------------------------
+
+
+def _row_to_chunk(row: tuple[Any, ...]) -> Chunk:
+    """Reconstruit un Chunk à partir des dix premières colonnes d'une recherche."""
+    return Chunk(
+        document_id=row[0],
+        article_id=row[1],
+        version=row[2],
+        valid_from=row[3],
+        valid_until=row[4],
+        history=tuple(row[5]),
+        chunk_index=row[6],
+        text=row[7],
+        page_start=row[8],
+        page_end=row[9],
+    )
 
 
 def _check_vectors(chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) -> None:
@@ -175,21 +211,29 @@ def search(
     rows = connection.execute(
         _SEARCH, {"query": Vector(list(query_vector)), "model": embedding_model, "k": k}
     ).fetchall()
-    return [
-        SearchResult(
-            chunk=Chunk(
-                document_id=row[0],
-                article_id=row[1],
-                version=row[2],
-                valid_from=row[3],
-                valid_until=row[4],
-                history=tuple(row[5]),
-                chunk_index=row[6],
-                text=row[7],
-                page_start=row[8],
-                page_end=row[9],
-            ),
-            score=1.0 - row[10],
-        )
-        for row in rows
-    ]
+    return [SearchResult(chunk=_row_to_chunk(row), score=1.0 - row[10]) for row in rows]
+
+
+def full_text_search(
+    connection: psycopg.Connection[tuple[Any, ...]],
+    question: str,
+    embedding_model: str,
+    k: int = 5,
+) -> list[SearchResult]:
+    """Renvoie les k chunks en vigueur qui partagent le plus de mots avec la question.
+
+    Args:
+        connection: connexion ouverte (voir storage.database.connect).
+        question: question en langage courant.
+        embedding_model: seuls les chunks de ce modèle sont cherchés, pour
+            travailler sur les mêmes chunks que la recherche vectorielle.
+        k: nombre maximal de résultats.
+
+    Returns:
+        Résultats du mieux au moins bien classé ; liste vide si la question ne
+        contient que des mots vides.
+    """
+    rows = connection.execute(
+        _FULL_TEXT_SEARCH, {"question": question, "model": embedding_model, "k": k}
+    ).fetchall()
+    return [SearchResult(chunk=_row_to_chunk(row), score=row[10]) for row in rows]

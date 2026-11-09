@@ -7,6 +7,7 @@ qualité sémantique du modèle.
 """
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
@@ -15,7 +16,12 @@ import pytest
 
 from fire_safety_rag.ingestion.chunker import Chunk
 from fire_safety_rag.storage.schema import EMBEDDING_DIMENSION, init_schema
-from fire_safety_rag.storage.store import get_indexed_document, replace_document, search
+from fire_safety_rag.storage.store import (
+    full_text_search,
+    get_indexed_document,
+    replace_document,
+    search,
+)
 
 Connection = psycopg.Connection[tuple[Any, ...]]
 MODEL = "modele-de-test"
@@ -42,6 +48,13 @@ def _unit_vector(axis: int) -> list[float]:
     vector = [0.0] * EMBEDDING_DIMENSION
     vector[axis] = 1.0
     return vector
+
+
+def _index_texts(db: Connection, *texts: str) -> None:
+    """Indexe des chunks de test dont on choisit le texte (R0, R1, ...)."""
+    chunks = [replace(_chunk(position), text=text) for position, text in enumerate(texts)]
+    vectors = [_unit_vector(position) for position in range(len(texts))]
+    replace_document(db, "doc-test", "hash", MODEL, chunks, vectors)
 
 
 @pytest.fixture
@@ -127,3 +140,39 @@ class TestAvecBase:
         replace_document(db, "doc-test", "hash-1", MODEL, [_chunk(0)], [_unit_vector(0)])
 
         assert get_indexed_document(db, "doc-test") == ("hash-1", MODEL)
+
+    def test_plein_texte_un_seul_mot_commun_suffit(self, db: Connection) -> None:
+        """OU, racine : « sortie » trouve « sorties » malgré les autres mots."""
+        _index_texts(db, "Les sorties sont balisées.", "Le chauffage est interdit.")
+
+        results = full_text_search(db, "Où trouver la sortie ?", MODEL, k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R0"]
+
+    def test_plein_texte_classe_par_mots_communs(self, db: Connection) -> None:
+        """Le chunk qui partage le plus de mots avec la question arrive en premier."""
+        _index_texts(db, "Un extincteur.", "Un extincteur dans le couloir.")
+
+        results = full_text_search(db, "extincteur couloir", MODEL, k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R1", "R0"]
+
+    def test_plein_texte_chunk_expire_jamais_renvoye(self, db: Connection) -> None:
+        """Le filtre de vigueur s'applique aussi au plein texte."""
+        chunks = [replace(_chunk(0, valid_until=date(2000, 1, 1)), text="Extincteur.")]
+        replace_document(db, "doc-test", "hash", MODEL, chunks, [_unit_vector(0)])
+
+        assert full_text_search(db, "extincteur", MODEL, k=5) == []
+
+    def test_plein_texte_autre_modele_jamais_renvoye(self, db: Connection) -> None:
+        """Le plein texte porte sur les mêmes chunks que la recherche vectorielle."""
+        chunks = [replace(_chunk(0), text="Extincteur.")]
+        replace_document(db, "doc-test", "hash", "autre-modele", chunks, [_unit_vector(0)])
+
+        assert full_text_search(db, "extincteur", MODEL, k=5) == []
+
+    def test_plein_texte_mots_vides_seulement(self, db: Connection) -> None:
+        """Une question sans mot significatif ne renvoie rien, sans erreur."""
+        _index_texts(db, "La sortie de secours.")
+
+        assert full_text_search(db, "de la", MODEL, k=5) == []
