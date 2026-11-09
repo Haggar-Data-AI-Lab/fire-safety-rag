@@ -1,5 +1,6 @@
 """Tests des métriques et du chargement du jeu de questions (sans base)."""
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -8,10 +9,13 @@ from fire_safety_rag.evaluation.evaluate import (
     DEFAULT_QUESTIONS,
     EvalQuestion,
     QuestionResult,
+    evaluate,
     load_questions,
     summarize,
 )
 from fire_safety_rag.evaluation.metrics import first_relevant_rank, hit_at_k, reciprocal_rank
+from fire_safety_rag.ingestion.chunker import Chunk
+from fire_safety_rag.storage.store import SearchResult
 
 
 class TestMetrics:
@@ -47,6 +51,37 @@ class TestMetrics:
         assert summary["Hit@3"] == pytest.approx(2 / 3)
         assert summary["Hit@5"] == pytest.approx(2 / 3)
         assert summary["MRR"] == pytest.approx((1 + 1 / 3) / 3)
+
+
+def _result(article_id: str) -> SearchResult:
+    """Résultat de recherche minimal pour un article du document "doc"."""
+    chunk = Chunk(
+        document_id="doc",
+        article_id=article_id,
+        version="VERSION",
+        valid_from=date(2020, 1, 1),
+        valid_until=None,
+        history=(),
+        chunk_index=0,
+        text="Texte.",
+        page_start=1,
+        page_end=1,
+    )
+    return SearchResult(chunk=chunk, score=0.5)
+
+
+def test_evaluate_repere_le_rang_de_l_article_attendu() -> None:
+    """evaluate transmet k à la recherche et repère le rang de l'article attendu."""
+    question = EvalQuestion("q01", "Question ?", frozenset({"doc:B"}), "")
+
+    def fake_retrieve(text: str, k: int) -> list[SearchResult]:
+        assert (text, k) == ("Question ?", 3)
+        return [_result("A"), _result("B")]
+
+    results = evaluate([question], fake_retrieve, k=3)
+
+    assert results[0].retrieved == ["doc:A", "doc:B"]
+    assert results[0].rank == 2
 
 
 def test_load_questions_plusieurs_articles_attendus(tmp_path: Path) -> None:

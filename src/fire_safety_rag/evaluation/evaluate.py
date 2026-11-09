@@ -5,9 +5,10 @@ puis rang du premier article attendu. Affiche Hit@1, Hit@3, Hit@k, le MRR et
 le détail des questions dont la bonne réponse n'est pas en tête.
 
 Utilisation (base indexée, extra "embeddings" installé) :
-    python -m fire_safety_rag.evaluation.evaluate
+    python -m fire_safety_rag.evaluation.evaluate [--mode vecteurs|plein-texte|hybride]
 """
 
+import argparse
 import csv
 import logging
 import statistics
@@ -23,9 +24,14 @@ from fire_safety_rag.embedding.embedder import embed_query
 from fire_safety_rag.evaluation.metrics import first_relevant_rank, hit_at_k, reciprocal_rank
 from fire_safety_rag.ingestion.pipeline import PROJECT_ROOT
 from fire_safety_rag.storage.database import connect
-from fire_safety_rag.storage.store import search
+from fire_safety_rag.storage.store import SearchResult, full_text_search, hybrid_search, search
 
 DEFAULT_QUESTIONS = PROJECT_ROOT / "data" / "eval" / "questions.csv"
+
+RETRIEVAL_MODES = ("vecteurs", "plein-texte", "hybride")
+
+# Recherche à évaluer : (question, k) -> résultats du meilleur au moins bon.
+Retriever = Callable[[str, int], list[SearchResult]]
 
 
 @dataclass(frozen=True)
@@ -83,20 +89,44 @@ def load_questions(path: Path) -> list[EvalQuestion]:
         ]
 
 
-def evaluate(
+def make_retriever(
     connection: psycopg.Connection[tuple[Any, ...]],
-    questions: Sequence[EvalQuestion],
+    mode: str,
     embed: Callable[[str], list[float]],
     embedding_model: str,
-    k: int = 5,
-) -> list[QuestionResult]:
-    """Interroge la base pour chaque question et repère le rang de la bonne réponse.
+) -> Retriever:
+    """Construit la fonction de recherche correspondant à un mode.
 
     Args:
         connection: connexion à une base indexée.
-        questions: questions à évaluer.
+        mode: une des valeurs de RETRIEVAL_MODES.
         embed: fonction qui vectorise une question (embed_query en usage réel).
         embedding_model: modèle qui a produit les vecteurs en base.
+
+    Returns:
+        Fonction (question, k) -> résultats.
+    """
+
+    def by_vector(question: str, k: int) -> list[SearchResult]:
+        return search(connection, embed(question), embedding_model, k=k)
+
+    def by_text(question: str, k: int) -> list[SearchResult]:
+        return full_text_search(connection, question, embedding_model, k=k)
+
+    def hybrid(question: str, k: int) -> list[SearchResult]:
+        return hybrid_search(connection, question, embed(question), embedding_model, k=k)
+
+    return {"vecteurs": by_vector, "plein-texte": by_text, "hybride": hybrid}[mode]
+
+
+def evaluate(
+    questions: Sequence[EvalQuestion], retrieve: Retriever, k: int = 5
+) -> list[QuestionResult]:
+    """Interroge la recherche pour chaque question et repère le rang de la bonne réponse.
+
+    Args:
+        questions: questions à évaluer.
+        retrieve: recherche à évaluer (voir make_retriever).
         k: nombre de résultats regardés par question.
 
     Returns:
@@ -104,7 +134,7 @@ def evaluate(
     """
     results: list[QuestionResult] = []
     for question in questions:
-        hits = search(connection, embed(question.question), embedding_model, k=k)
+        hits = retrieve(question.question, k)
         retrieved = [f"{hit.chunk.document_id}:{hit.chunk.article_id}" for hit in hits]
         results.append(
             QuestionResult(question, retrieved, first_relevant_rank(retrieved, question.expected))
@@ -133,6 +163,12 @@ def summarize(results: Sequence[QuestionResult], k: int = 5) -> dict[str, float]
 
 def main() -> None:
     """Évalue la recherche sur le jeu de questions par défaut et affiche le bilan."""
+    parser = argparse.ArgumentParser(description="Évalue la recherche sur le jeu de questions.")
+    parser.add_argument(
+        "--mode", choices=RETRIEVAL_MODES, default="vecteurs", help="méthode de recherche évaluée"
+    )
+    args = parser.parse_args()
+
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
     # Les requêtes de vérification de Hugging Face ne sont que du bruit ici
@@ -140,9 +176,10 @@ def main() -> None:
 
     questions = load_questions(DEFAULT_QUESTIONS)
     with connect(settings) as connection:
-        results = evaluate(connection, questions, embed_query, settings.embedding_model)
+        retrieve = make_retriever(connection, args.mode, embed_query, settings.embedding_model)
+        results = evaluate(questions, retrieve)
 
-    print(f"\n{len(results)} questions évaluées ({settings.embedding_model})")
+    print(f"\n{len(results)} questions évaluées ({settings.embedding_model}, mode {args.mode})")
     for name, value in summarize(results).items():
         print(f"  {name:6} {value:.2f}")
 

@@ -46,6 +46,30 @@ def test_colonne_embedding_en_768_dimensions(connection: Connection) -> None:
     assert row == (f"vector({EMBEDDING_DIMENSION})",)
 
 
+def test_search_vector_calcule_en_francais(connection: Connection) -> None:
+    """search_vector est remplie automatiquement, avec les règles du français."""
+    init_schema(connection)
+    with connection.transaction(force_rollback=True):
+        connection.execute(
+            "INSERT INTO documents (document_id, content_hash, embedding_model)"
+            " VALUES ('doc-test', 'hash', 'modele')"
+        )
+        connection.execute(
+            "INSERT INTO chunks (document_id, position, article_id, chunk_index, version,"
+            " valid_from, valid_until, history, text, page_start, page_end, embedding)"
+            " VALUES ('doc-test', 0, 'R1', 0, 'VERSION', %s, NULL, %s,"
+            " 'Les sorties de secours.', 1, 1, %s)",
+            (date(2020, 1, 1), ["Création Arrêté"], [0.0] * EMBEDDING_DIMENSION),
+        )
+        row = connection.execute(
+            "SELECT search_vector @@ to_tsquery('french', 'sortie'),"
+            " search_vector @@ 'les'::tsquery"
+            " FROM chunks WHERE document_id = 'doc-test'"
+        ).fetchone()
+
+        assert row == (True, False)
+
+
 def test_suppression_document_supprime_ses_chunks(connection: Connection) -> None:
     """ON DELETE CASCADE : supprimer un document supprime ses chunks.
 

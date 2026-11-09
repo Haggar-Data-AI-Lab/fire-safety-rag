@@ -7,6 +7,7 @@ qualité sémantique du modèle.
 """
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
@@ -15,7 +16,15 @@ import pytest
 
 from fire_safety_rag.ingestion.chunker import Chunk
 from fire_safety_rag.storage.schema import EMBEDDING_DIMENSION, init_schema
-from fire_safety_rag.storage.store import get_indexed_document, replace_document, search
+from fire_safety_rag.storage.store import (
+    SearchResult,
+    full_text_search,
+    get_indexed_document,
+    hybrid_search,
+    reciprocal_rank_fusion,
+    replace_document,
+    search,
+)
 
 Connection = psycopg.Connection[tuple[Any, ...]]
 MODEL = "modele-de-test"
@@ -42,6 +51,18 @@ def _unit_vector(axis: int) -> list[float]:
     vector = [0.0] * EMBEDDING_DIMENSION
     vector[axis] = 1.0
     return vector
+
+
+def _index_texts(db: Connection, *texts: str) -> None:
+    """Indexe des chunks de test dont on choisit le texte (R0, R1, ...)."""
+    chunks = [replace(_chunk(position), text=text) for position, text in enumerate(texts)]
+    vectors = [_unit_vector(position) for position in range(len(texts))]
+    replace_document(db, "doc-test", "hash", MODEL, chunks, vectors)
+
+
+def _ranking(*positions: int) -> list[SearchResult]:
+    """Classement de chunks de test ; le score est arbitraire, RRF l'ignore."""
+    return [SearchResult(chunk=_chunk(position), score=0.5) for position in positions]
 
 
 @pytest.fixture
@@ -78,6 +99,30 @@ class TestValidation:
                 [_chunk(0)],
                 [[1.0, 0.0, 0.0]],
             )
+
+
+class TestFusion:
+    """Fusion des classements (sans base : tourne aussi en CI)."""
+
+    def test_accord_des_deux_listes_passe_devant(self) -> None:
+        """R1 est présent dans les deux listes : il passe devant le premier d'une seule."""
+        results = reciprocal_rank_fusion([_ranking(0, 2, 1), _ranking(1, 3)], k=5)
+
+        # R2 et R3 sont à égalité (rang 2) : la première liste départage.
+        assert [result.chunk.article_id for result in results] == ["R1", "R0", "R2", "R3"]
+        assert results[0].score == pytest.approx(1 / 63 + 1 / 61)
+
+    def test_coupe_a_k_resultats(self) -> None:
+        """La fusion regarde tous les candidats, mais n'en renvoie que k."""
+        results = reciprocal_rank_fusion([_ranking(0, 1, 2)], k=2)
+
+        assert [result.chunk.article_id for result in results] == ["R0", "R1"]
+
+    def test_liste_vide(self) -> None:
+        """Une liste vide (question sans mot utile) laisse l'autre classement intact."""
+        results = reciprocal_rank_fusion([_ranking(1, 0), []], k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R1", "R0"]
 
 
 class TestAvecBase:
@@ -127,3 +172,47 @@ class TestAvecBase:
         replace_document(db, "doc-test", "hash-1", MODEL, [_chunk(0)], [_unit_vector(0)])
 
         assert get_indexed_document(db, "doc-test") == ("hash-1", MODEL)
+
+    def test_plein_texte_un_seul_mot_commun_suffit(self, db: Connection) -> None:
+        """OU, racine : « sortie » trouve « sorties » malgré les autres mots."""
+        _index_texts(db, "Les sorties sont balisées.", "Le chauffage est interdit.")
+
+        results = full_text_search(db, "Où trouver la sortie ?", MODEL, k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R0"]
+
+    def test_plein_texte_classe_par_mots_communs(self, db: Connection) -> None:
+        """Le chunk qui partage le plus de mots avec la question arrive en premier."""
+        _index_texts(db, "Un extincteur.", "Un extincteur dans le couloir.")
+
+        results = full_text_search(db, "extincteur couloir", MODEL, k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R1", "R0"]
+
+    def test_plein_texte_chunk_expire_jamais_renvoye(self, db: Connection) -> None:
+        """Le filtre de vigueur s'applique aussi au plein texte."""
+        chunks = [replace(_chunk(0, valid_until=date(2000, 1, 1)), text="Extincteur.")]
+        replace_document(db, "doc-test", "hash", MODEL, chunks, [_unit_vector(0)])
+
+        assert full_text_search(db, "extincteur", MODEL, k=5) == []
+
+    def test_plein_texte_autre_modele_jamais_renvoye(self, db: Connection) -> None:
+        """Le plein texte porte sur les mêmes chunks que la recherche vectorielle."""
+        chunks = [replace(_chunk(0), text="Extincteur.")]
+        replace_document(db, "doc-test", "hash", "autre-modele", chunks, [_unit_vector(0)])
+
+        assert full_text_search(db, "extincteur", MODEL, k=5) == []
+
+    def test_plein_texte_mots_vides_seulement(self, db: Connection) -> None:
+        """Une question sans mot significatif ne renvoie rien, sans erreur."""
+        _index_texts(db, "La sortie de secours.")
+
+        assert full_text_search(db, "de la", MODEL, k=5) == []
+
+    def test_hybride_combine_les_deux_recherches(self, db: Connection) -> None:
+        """R0 est trouvé par les deux recherches : il passe devant le plus proche en vecteurs."""
+        _index_texts(db, "Extincteur mobile.", "Chauffage interdit.")
+
+        results = hybrid_search(db, "extincteur", _unit_vector(1), MODEL, k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R0", "R1"]
