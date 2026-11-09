@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     page_start   integer NOT NULL,
     page_end     integer NOT NULL,
     embedding    vector({EMBEDDING_DIMENSION}) NOT NULL,
+    search_vector tsvector GENERATED ALWAYS AS (to_tsvector('french', text)) STORED,
     PRIMARY KEY (document_id, position)
 );
 """
@@ -51,6 +52,7 @@ def init_schema(connection: psycopg.Connection[tuple[Any, ...]]) -> None:
     - chunks : une ligne par chunk, identifiée par (document_id, position),
       car article_id n'est pas unique (ex. "Annexe I" deux fois dans l'ERP).
       Supprimer un document supprime ses chunks (ON DELETE CASCADE).
+      search_vector est calculée par PostgreSQL à partir de text (plein texte).
 
     Args:
         connection: connexion ouverte (voir storage.database.connect).
