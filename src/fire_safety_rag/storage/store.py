@@ -58,6 +58,9 @@ ORDER BY rank DESC, c.document_id, c.position
 LIMIT %(k)s
 """
 
+# Constante de la fusion RRF, valeur de l'article d'origine (Cormack et al., 2009).
+RRF_CONSTANT = 60
+
 
 # ---------------------------------------------------------------------------
 # Structures de données
@@ -70,9 +73,10 @@ class SearchResult:
 
     Attributes:
         chunk: chunk retrouvé, avec ses métadonnées (pages, dates, historique).
-        score: similarité cosinus (recherche vectorielle) ou ts_rank (plein
-            texte) ; plus il est élevé, mieux le chunk est classé. Seul l'ordre
-            est significatif : les deux échelles ne sont pas comparables.
+        score: similarité cosinus (recherche vectorielle), ts_rank (plein
+            texte) ou score RRF (fusion) ; plus il est élevé, mieux le chunk
+            est classé. Seul l'ordre est significatif : ces échelles ne sont
+            pas comparables.
     """
 
     chunk: Chunk
@@ -237,3 +241,27 @@ def full_text_search(
         _FULL_TEXT_SEARCH, {"question": question, "model": embedding_model, "k": k}
     ).fetchall()
     return [SearchResult(chunk=_row_to_chunk(row), score=row[10]) for row in rows]
+
+
+def reciprocal_rank_fusion(
+    rankings: Sequence[Sequence[SearchResult]], k: int = 5
+) -> list[SearchResult]:
+    """Fusionne plusieurs classements en un seul (Reciprocal Rank Fusion).
+
+    Chaque chunk gagne 1 / (RRF_CONSTANT + rang) dans chaque classement où il
+    apparaît. Seuls les rangs comptent : les scores d'origine ne sont pas
+    comparables entre eux. À score égal, le chunk vu en premier reste devant.
+
+    Args:
+        rankings: classements à fusionner, chacun du meilleur au moins bon.
+        k: nombre maximal de résultats.
+
+    Returns:
+        Résultats fusionnés, du meilleur au moins bon ; `score` est le score RRF.
+    """
+    scores: dict[Chunk, float] = {}
+    for ranking in rankings:
+        for rank, result in enumerate(ranking, start=1):
+            scores[result.chunk] = scores.get(result.chunk, 0.0) + 1 / (RRF_CONSTANT + rank)
+    ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    return [SearchResult(chunk=chunk, score=score) for chunk, score in ordered[:k]]
