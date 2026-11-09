@@ -61,6 +61,10 @@ LIMIT %(k)s
 # Constante de la fusion RRF, valeur de l'article d'origine (Cormack et al., 2009).
 RRF_CONSTANT = 60
 
+# Candidats demandés à chaque méthode avant la fusion : assez pour qu'un chunk
+# moyennement classé des deux côtés puisse remonter. Valeur non optimisée.
+HYBRID_CANDIDATES = 50
+
 
 # ---------------------------------------------------------------------------
 # Structures de données
@@ -265,3 +269,27 @@ def reciprocal_rank_fusion(
             scores[result.chunk] = scores.get(result.chunk, 0.0) + 1 / (RRF_CONSTANT + rank)
     ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     return [SearchResult(chunk=chunk, score=score) for chunk, score in ordered[:k]]
+
+
+def hybrid_search(
+    connection: psycopg.Connection[tuple[Any, ...]],
+    question: str,
+    query_vector: Sequence[float],
+    embedding_model: str,
+    k: int = 5,
+) -> list[SearchResult]:
+    """Combine la recherche vectorielle et le plein texte par fusion RRF.
+
+    Args:
+        connection: connexion ouverte (voir storage.database.connect).
+        question: question en langage courant, pour le plein texte.
+        query_vector: vecteur de la question (voir embedding.embed_query).
+        embedding_model: modèle qui a produit `query_vector`.
+        k: nombre maximal de résultats.
+
+    Returns:
+        Résultats fusionnés, du meilleur au moins bon.
+    """
+    by_vector = search(connection, query_vector, embedding_model, k=HYBRID_CANDIDATES)
+    by_text = full_text_search(connection, question, embedding_model, k=HYBRID_CANDIDATES)
+    return reciprocal_rank_fusion([by_vector, by_text], k=k)

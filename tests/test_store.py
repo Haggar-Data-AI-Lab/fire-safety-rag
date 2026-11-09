@@ -20,6 +20,7 @@ from fire_safety_rag.storage.store import (
     SearchResult,
     full_text_search,
     get_indexed_document,
+    hybrid_search,
     reciprocal_rank_fusion,
     replace_document,
     search,
@@ -207,3 +208,11 @@ class TestAvecBase:
         _index_texts(db, "La sortie de secours.")
 
         assert full_text_search(db, "de la", MODEL, k=5) == []
+
+    def test_hybride_combine_les_deux_recherches(self, db: Connection) -> None:
+        """R0 est trouvé par les deux recherches : il passe devant le plus proche en vecteurs."""
+        _index_texts(db, "Extincteur mobile.", "Chauffage interdit.")
+
+        results = hybrid_search(db, "extincteur", _unit_vector(1), MODEL, k=5)
+
+        assert [result.chunk.article_id for result in results] == ["R0", "R1"]
