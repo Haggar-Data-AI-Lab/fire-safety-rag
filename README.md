@@ -17,8 +17,9 @@ publics et en citant ses sources.
   dans PostgreSQL + pgvector, avec saut des documents inchangés (empreinte SHA-256).
 - ✅ **Évaluation de la recherche** : 29 questions, résultats ci-dessous.
 - 🔄 **Amélioration de la recherche** : une piste à la fois, mesurée à chaque fois.
-- ⏳ À venir : recherche hybride (mots-clés + vecteurs), génération des réponses avec
-  citations (LLM), API et interface.
+- ✅ **Recherche hybride évaluée** (plein texte PostgreSQL + vecteurs, fusion RRF) :
+  non retenue, voir ci-dessous.
+- ⏳ À venir : génération des réponses avec citations (LLM), API et interface.
 
 ## Résultats actuels (recherche seule)
 
@@ -34,6 +35,18 @@ Hit@k : part des questions dont l'article attendu figure dans les k premiers ré
 MRR : moyenne de 1 / rang du premier bon résultat. Le jeu de questions est encore
 petit (une question = 3,4 points) : seuls des écarts nets et cohérents entre les
 métriques sont retenus.
+
+### Comparaison des méthodes de recherche
+
+| Méthode | Hit@1 | Hit@3 | Hit@5 | MRR |
+|---|---|---|---|---|
+| **Vecteurs seuls (retenue)** | **0,41** | **0,62** | **0,66** | **0,52** |
+| Plein texte seul | 0,34 | 0,45 | 0,55 | 0,41 |
+| Hybride (fusion RRF) | 0,41 | 0,59 | 0,62 | 0,49 |
+
+L'hybride gagne 5 questions et en perd 5 par rapport aux vecteurs seuls : sans gain
+mesuré, il n'est pas retenu. Le plein texte utilise `ts_rank` normalisé par le
+logarithme de la longueur, sans IDF ; BM25 n'a pas été testé.
 
 Principaux échecs restants : questions sur le Code du travail ou le Code de la
 construction captées par le règlement ERP (83 % des chunks), et articles SSIAP
@@ -78,8 +91,8 @@ python -m fire_safety_rag.ingestion.pipeline
 #    par exemple après une modification du découpage ou de data/sources.csv)
 python -m fire_safety_rag.indexing.indexer
 
-# 3. Mesurer la qualité de la recherche
-python -m fire_safety_rag.evaluation.evaluate
+# 3. Mesurer la qualité de la recherche (--mode vecteurs, plein-texte ou hybride)
+python -m fire_safety_rag.evaluation.evaluate --mode vecteurs
 ```
 
 Le premier lancement télécharge le modèle d'embedding (~1 Go) dans le cache
