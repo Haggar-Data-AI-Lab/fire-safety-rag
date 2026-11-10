@@ -5,13 +5,18 @@ puis rang du premier article attendu. Affiche Hit@1, Hit@3, Hit@k, le MRR et
 le détail des questions dont la bonne réponse n'est pas en tête.
 
 Utilisation (base indexée, extra "embeddings" installé) :
-    python -m fire_safety_rag.evaluation.evaluate [--mode vecteurs|plein-texte|hybride]
+    python -m fire_safety_rag.evaluation.evaluate [--mode MODE]
+    (MODE : vecteurs, plein-texte, hybride ou vecteurs+reranker ; défaut vecteurs)
+
+Le mode vecteurs+reranker utilise RERANKER_MODEL (ou BAAI/bge-reranker-v2-m3
+si vide) sur RERANK_CANDIDATES candidats ; le premier lancement télécharge le modèle.
 """
 
 import argparse
 import csv
 import logging
 import statistics
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,16 +27,19 @@ import psycopg
 from fire_safety_rag.config import get_settings
 from fire_safety_rag.embedding.embedder import embed_query
 from fire_safety_rag.evaluation.metrics import first_relevant_rank, hit_at_k, reciprocal_rank
-from fire_safety_rag.ingestion.pipeline import PROJECT_ROOT
+from fire_safety_rag.ingestion.pipeline import DEFAULT_CATALOGUE, PROJECT_ROOT, load_catalogue
+from fire_safety_rag.reranking.reranker import DEFAULT_RERANKER, model_scorer, rerank
 from fire_safety_rag.storage.database import connect
 from fire_safety_rag.storage.store import SearchResult, full_text_search, hybrid_search, search
 
 DEFAULT_QUESTIONS = PROJECT_ROOT / "data" / "eval" / "questions.csv"
 
-RETRIEVAL_MODES = ("vecteurs", "plein-texte", "hybride")
+RETRIEVAL_MODES = ("vecteurs", "plein-texte", "hybride", "vecteurs+reranker")
 
 # Recherche à évaluer : (question, k) -> résultats du meilleur au moins bon.
 Retriever = Callable[[str, int], list[SearchResult]]
+# Reclassement : (question, candidats, k) -> k meilleurs passages.
+Reranker = Callable[[str, list[SearchResult], int], list[SearchResult]]
 
 
 @dataclass(frozen=True)
@@ -94,6 +102,8 @@ def make_retriever(
     mode: str,
     embed: Callable[[str], list[float]],
     embedding_model: str,
+    rerank_fn: Reranker | None = None,
+    candidates: int = 30,
 ) -> Retriever:
     """Construit la fonction de recherche correspondant à un mode.
 
@@ -102,10 +112,17 @@ def make_retriever(
         mode: une des valeurs de RETRIEVAL_MODES.
         embed: fonction qui vectorise une question (embed_query en usage réel).
         embedding_model: modèle qui a produit les vecteurs en base.
+        rerank_fn: reclassement, exigé par le mode "vecteurs+reranker".
+        candidates: candidats vectoriels relus par le reranker.
 
     Returns:
         Fonction (question, k) -> résultats.
+
+    Raises:
+        ValueError: mode "vecteurs+reranker" sans rerank_fn.
     """
+    if mode == "vecteurs+reranker" and rerank_fn is None:
+        raise ValueError("Le mode vecteurs+reranker exige une fonction de reclassement.")
 
     def by_vector(question: str, k: int) -> list[SearchResult]:
         return search(connection, embed(question), embedding_model, k=k)
@@ -116,7 +133,17 @@ def make_retriever(
     def hybrid(question: str, k: int) -> list[SearchResult]:
         return hybrid_search(connection, question, embed(question), embedding_model, k=k)
 
-    return {"vecteurs": by_vector, "plein-texte": by_text, "hybride": hybrid}[mode]
+    def reranked(question: str, k: int) -> list[SearchResult]:
+        assert rerank_fn is not None  # vérifié plus haut
+        return rerank_fn(question, by_vector(question, max(candidates, k)), k)
+
+    modes: dict[str, Retriever] = {
+        "vecteurs": by_vector,
+        "plein-texte": by_text,
+        "hybride": hybrid,
+        "vecteurs+reranker": reranked,
+    }
+    return modes[mode]
 
 
 def evaluate(
@@ -174,14 +201,38 @@ def main() -> None:
     # Les requêtes de vérification de Hugging Face ne sont que du bruit ici
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
+    rerank_fn: Reranker | None = None
+    label = settings.embedding_model
+    if args.mode == "vecteurs+reranker":
+        reranker_model = settings.reranker_model or DEFAULT_RERANKER
+        titles = {row["id"]: row["titre_court"] for row in load_catalogue(DEFAULT_CATALOGUE)}
+        scorer = model_scorer(reranker_model)
+
+        def rerank_fn(question: str, candidates: list[SearchResult], k: int) -> list[SearchResult]:
+            return rerank(question, candidates, titles, scorer, top_k=k)
+
+        label += f" + {reranker_model}, {settings.rerank_candidates} candidats"
+
     questions = load_questions(DEFAULT_QUESTIONS)
     with connect(settings) as connection:
-        retrieve = make_retriever(connection, args.mode, embed_query, settings.embedding_model)
+        retrieve = make_retriever(
+            connection,
+            args.mode,
+            embed_query,
+            settings.embedding_model,
+            rerank_fn=rerank_fn,
+            candidates=settings.rerank_candidates,
+        )
+        # Premier appel hors chronométrage : il charge les modèles
+        retrieve(questions[0].question, 5)
+        start = time.perf_counter()
         results = evaluate(questions, retrieve)
+        seconds_per_question = (time.perf_counter() - start) / len(questions)
 
-    print(f"\n{len(results)} questions évaluées ({settings.embedding_model}, mode {args.mode})")
+    print(f"\n{len(results)} questions évaluées ({label}, mode {args.mode})")
     for name, value in summarize(results).items():
         print(f"  {name:6} {value:.2f}")
+    print(f"  Temps moyen par question : {seconds_per_question:.2f} s")
 
     print("\nQuestions dont la bonne réponse n'est pas en tête :")
     for result in results:

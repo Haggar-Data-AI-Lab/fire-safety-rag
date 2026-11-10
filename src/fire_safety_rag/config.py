@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # sur 19 refusée, 6 questions hors corpus sur 10 refusées. Dépend du
     # modèle d'embedding : à remesurer si embedding_model change.
     refusal_min_score: float = 0.84
+    # Reranker (cross-encodeur local) : relit la question avec chaque candidat
+    # de la recherche vectorielle et garde les meilleurs. Vide = désactivé.
+    # Ses scores sont sur une autre échelle : le seuil de refus est à
+    # remesurer avant de l'activer dans la commande de réponse.
+    reranker_model: str | None = None
+    # Nombre de candidats retenus par la recherche vectorielle avant le reranker.
+    rerank_candidates: int = 30
 
     # LLM (API Anthropic). La clé n'a pas de valeur par défaut : elle n'est
     # exigée qu'au premier appel, pour que le reste du projet fonctionne sans.
