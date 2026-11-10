@@ -16,6 +16,7 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    monkeypatch.delenv("REFUSAL_MIN_SCORE", raising=False)
     for name in ("USER", "PASSWORD", "DB", "HOST", "PORT"):
         monkeypatch.delenv(f"POSTGRES_{name}", raising=False)
     get_settings.cache_clear()
@@ -30,6 +31,14 @@ def test_defaults_without_env_file() -> None:
     assert settings.app_env == "dev"
     assert settings.log_level == "INFO"
     assert settings.embedding_model == "intfloat/multilingual-e5-base"
+    assert settings.refusal_min_score == 0.84
+
+
+def test_refusal_min_score_depuis_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Le seuil de refus se règle par variable d'environnement (texte converti en nombre)."""
+    monkeypatch.setenv("REFUSAL_MIN_SCORE", "0.9")
+
+    assert Settings().refusal_min_score == 0.9
 
 
 def test_reads_env_file(isolated_env: Path) -> None:

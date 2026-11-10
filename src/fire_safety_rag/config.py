@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     # Modèle d'embedding Hugging Face. Changer de modèle impose de revectoriser
     # tout le corpus : les vecteurs de deux modèles ne sont pas comparables.
     embedding_model: str = "intfloat/multilingual-e5-base"
+    # Seuil de refus : si le meilleur passage a une similarité cosinus
+    # inférieure, on refuse de répondre sans appeler le LLM. Valeur mesurée le
+    # 10/11/2026 avec e5-base (evaluation/threshold.py) : 0 question trouvée
+    # sur 19 refusée, 6 questions hors corpus sur 10 refusées. Dépend du
+    # modèle d'embedding : à remesurer si embedding_model change.
+    refusal_min_score: float = 0.84
 
     # Base PostgreSQL (mêmes variables que docker-compose.yml). Le mot de passe
     # n'a pas de valeur par défaut : il n'est exigé qu'à la connexion, pour que

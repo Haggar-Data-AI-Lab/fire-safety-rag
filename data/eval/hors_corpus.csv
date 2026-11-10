@@ -1,0 +1,11 @@
+id,question,note
+h01,Quelles sont les conditions pour obtenir la carte professionnelle d'agent de sécurité privée délivrée par le CNAPS ?,proche : sécurité privée (CNAPS absent du corpus)
+h02,Un agent de sécurité a-t-il le droit de faire une palpation de sécurité à l'entrée d'un magasin ?,proche : sécurité privée (palpation et fouille absents)
+h03,Faut-il une autorisation préfectorale pour installer un système de vidéoprotection dans un commerce ?,proche : sûreté (vidéoprotection absent)
+h04,Quelles règles s'appliquent aux agents cynophiles de sécurité et à leurs chiens ?,proche : sécurité privée (cynophile absent)
+h05,Un garde du corps peut-il être armé en France ?,proche : sécurité privée (garde du corps et port d'arme absents)
+h06,Quelles mesures prendre pour prévenir la légionellose dans les réseaux d'eau chaude d'un établissement recevant du public ?,proche : ERP mais risque sanitaire (légionellose absent)
+h07,Quel est le niveau de référence pour la concentration en radon dans un bâtiment ?,moyen : bâtiment mais risque sanitaire (radon absent)
+h08,Quelles démarches faire auprès de son assurance après une inondation ?,éloigné : assurance (inondation absent)
+h09,Quel est le taux de TVA applicable à la restauration sur place ?,éloigné : fiscalité (TVA absent)
+h10,Combien de points compte un permis de conduire probatoire ?,éloigné : code de la route (permis de conduire absent)
