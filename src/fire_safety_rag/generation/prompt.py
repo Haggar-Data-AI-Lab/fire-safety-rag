@@ -54,11 +54,20 @@ def _format_date(value: date) -> str:
     return value.strftime("%d/%m/%Y")
 
 
-def _format_heading(number: int, chunk: Chunk, document_title: str) -> str:
-    """Construit l'en-tête d'un passage : numéro, titre, article, pages, vigueur.
+def format_reference(chunk: Chunk, document_title: str) -> str:
+    """Construit la référence d'un passage : titre, article, pages, vigueur.
 
-    Exemple : "[1] Règlement ERP — Article MS 21 (pages 412-413,
+    Utilisée dans le prompt et dans les sources affichées, pour qu'elles
+    disent exactement la même chose.
+    Exemple : "Règlement ERP — Article MS 21 (pages 412-413,
     en vigueur depuis le 01/03/2020)".
+
+    Args:
+        chunk: chunk dont on construit la référence.
+        document_title: titre court du document.
+
+    Returns:
+        La référence, sans numéro.
     """
     is_annex = chunk.article_id.startswith("Annexe")
     article = chunk.article_id if is_annex else f"Article {chunk.article_id}"
@@ -69,7 +78,7 @@ def _format_heading(number: int, chunk: Chunk, document_title: str) -> str:
     validity = f"en vigueur depuis le {_format_date(chunk.valid_from)}"
     if chunk.valid_until is not None:
         validity += f", jusqu'au {_format_date(chunk.valid_until)}"
-    return f"[{number}] {document_title} — {article} ({pages}, {validity})"
+    return f"{document_title} — {article} ({pages}, {validity})"
 
 
 def build_prompt(
@@ -103,7 +112,7 @@ def build_prompt(
     for number, result in enumerate(results, start=1):
         chunk = result.chunk
         title = titles.get(chunk.document_id, chunk.document_id)
-        blocks.append(f"{_format_heading(number, chunk, title)}\n{chunk.text}")
+        blocks.append(f"[{number}] {format_reference(chunk, title)}\n{chunk.text}")
 
     passages = "\n\n".join(blocks)
     user = f"<passages>\n{passages}\n</passages>\n\nQuestion : {question.strip()}"
