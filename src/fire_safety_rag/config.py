@@ -34,6 +34,21 @@ class Settings(BaseSettings):
     # modèle d'embedding : à remesurer si embedding_model change.
     refusal_min_score: float = 0.84
 
+    # LLM (API Anthropic). La clé n'a pas de valeur par défaut : elle n'est
+    # exigée qu'au premier appel, pour que le reste du projet fonctionne sans.
+    # Elle est lue ici et passée explicitement au client : pydantic-settings
+    # ne recopie pas le fichier .env dans les variables d'environnement.
+    anthropic_api_key: SecretStr | None = None
+    llm_model: str = "claude-haiku-5-5"
+    # Profondeur de réflexion du modèle, facturée comme de la sortie : "low"
+    # suffit pour répondre à partir de quelques passages.
+    llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    # Plafond de tokens générés (réflexion + réponse).
+    llm_max_tokens: int = 2000
+    llm_timeout_seconds: float = 60.0
+    # Nouvelles tentatives du SDK sur erreur passagère (429, 5xx, réseau).
+    llm_max_retries: int = 2
+
     # Base PostgreSQL (mêmes variables que docker-compose.yml). Le mot de passe
     # n'a pas de valeur par défaut : il n'est exigé qu'à la connexion, pour que
     # le reste du projet fonctionne sans base. SecretStr le masque dans les
