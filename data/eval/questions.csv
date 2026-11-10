@@ -8,9 +8,9 @@ q06,Faut-il une rampe des deux côtés d'un escalier ?,code-travail-r4227-incend
 q07,Peut-on chauffer un atelier avec un combustible liquide très inflammable ?,code-travail-r4227-incendie:R4227-16,point éclair inférieur à 55 °C interdit
 q08,Qu'est-ce qu'une atmosphère explosive ?,code-travail-r4227-incendie:R4227-43,définition
 q09,Quelles sont les missions d'un agent de sécurité incendie SSIAP 1 ?,arrete-2005-05-02-ssiap:2;arrete-2005-05-02-ssiap:Annexe I,missions listées à l'article 2 et détaillées en annexe I
-q10,Quel diplôme faut-il pour être chef d'équipe de sécurité incendie ?,arrete-2005-05-02-ssiap:3,SSIAP 2
+q10,Quel diplôme faut-il pour être chef d'équipe de sécurité incendie ?,arrete-2005-05-02-ssiap:3;arrete-2005-05-02-ssiap:5,SSIAP 2 (art. 5 § 2 le dit directement)
 q11,Tous les combien un agent SSIAP doit-il faire son recyclage ?,arrete-2005-05-02-ssiap:7,triennal (secourisme tous les deux ans)
-q12,Combien d'heures dure la formation SSIAP 1 ?,arrete-2005-05-02-ssiap:Annexe II,67 heures
+q12,Combien d'heures dure la formation SSIAP 1 ?,arrete-2005-05-02-ssiap:Annexe II;arrete-2005-05-02-ssiap:4,67 heures (art. 4 § 3 le dit directement)
 q13,Faut-il un certificat médical pour suivre une formation SSIAP ?,arrete-2005-05-02-ssiap:Annexe VII,certificat de moins de trois mois
 q14,Comment se déroule l'examen du SSIAP 1 ?,arrete-2005-05-02-ssiap:Annexe IX,QCM de 30 questions + épreuves
 q15,Un centre de formation SSIAP doit-il être agréé ?,arrete-2005-05-02-ssiap:12,agrément obligatoire

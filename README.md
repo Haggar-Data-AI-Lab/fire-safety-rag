@@ -16,15 +16,32 @@ publics et en citant ses sources.
 - ✅ **Indexation** : vectorisation locale (`intfloat/multilingual-e5-base`) et stockage
   dans PostgreSQL + pgvector, avec saut des documents inchangés (empreinte SHA-256).
 - ✅ **Évaluation de la recherche** : 29 questions, résultats ci-dessous.
-- 🔄 **Amélioration de la recherche** : une piste à la fois, mesurée à chaque fois.
 - ✅ **Recherche hybride évaluée** (plein texte PostgreSQL + vecteurs, fusion RRF) :
   non retenue, voir ci-dessous.
-- ⏳ À venir : génération des réponses avec citations (LLM), API et interface.
+- ✅ **Réponses avec citations** (Claude Haiku 5.5) : refus si aucun passage n'est
+  assez proche, contrôle des numéros cités, coût journalisé.
+- ✅ **Évaluation de la chaîne complète** : 39 questions, voir
+  [`docs/evaluation.md`](docs/evaluation.md).
+- 🔄 **Amélioration de la recherche** (reranker), point faible identifié.
+- ⏳ À venir : API et interface.
 
-## Résultats actuels (recherche seule)
+## Résultats de la chaîne complète
+
+Sur 39 questions (29 du corpus, 10 hors corpus), détail dans
+[`docs/evaluation.md`](docs/evaluation.md) :
+
+- **10 / 10** questions hors corpus refusées, **0 / 19** refus à tort ;
+- aucune réponse n'invente une règle absente des passages ;
+- quand la recherche fournit le bon article, la réponse est correcte dans 17 cas sur 19 ;
+- point faible : la recherche (Hit@5 = 0,72). Sans le bon article, le LLM répond
+  à partir d'un texte voisin, le plus souvent du règlement ERP.
+
+Coût du lancement complet : 0,017 $ (environ 0,0005 $ par question).
+
+## Résultats de la recherche seule
 
 Mesures sur 29 questions ([`data/eval/questions.csv`](data/eval/questions.csv)),
-une seule modification par ligne :
+une seule modification par ligne, avec les attendus d'origine :
 
 | Version | Hit@1 | Hit@3 | Hit@5 | MRR |
 |---|---|---|---|---|
@@ -38,14 +55,17 @@ métriques sont retenus.
 
 ### Comparaison des méthodes de recherche
 
+Après correction de deux attendus (q10, q12 : un autre article de l'arrêté SSIAP
+répond directement, voir [`docs/evaluation.md`](docs/evaluation.md)) :
+
 | Méthode | Hit@1 | Hit@3 | Hit@5 | MRR |
 |---|---|---|---|---|
-| **Vecteurs seuls (retenue)** | **0,41** | **0,62** | **0,66** | **0,52** |
-| Plein texte seul | 0,34 | 0,45 | 0,55 | 0,41 |
-| Hybride (fusion RRF) | 0,41 | 0,59 | 0,62 | 0,49 |
+| **Vecteurs seuls (retenue)** | **0,45** | **0,69** | **0,72** | **0,57** |
+| Plein texte seul | 0,34 | 0,45 | 0,59 | 0,41 |
+| Hybride (fusion RRF) | 0,45 | 0,62 | 0,66 | 0,53 |
 
-L'hybride gagne 5 questions et en perd 5 par rapport aux vecteurs seuls : sans gain
-mesuré, il n'est pas retenu. Le plein texte utilise `ts_rank` normalisé par le
+L'hybride n'apporte pas de gain mesuré par rapport aux vecteurs seuls : il n'est
+pas retenu. Le plein texte utilise `ts_rank` normalisé par le
 logarithme de la longueur, sans IDF ; BM25 n'a pas été testé.
 
 Principaux échecs restants : questions sur le Code du travail ou le Code de la
@@ -93,7 +113,17 @@ python -m fire_safety_rag.indexing.indexer
 
 # 3. Mesurer la qualité de la recherche (--mode vecteurs, plein-texte ou hybride)
 python -m fire_safety_rag.evaluation.evaluate --mode vecteurs
+
+# 4. Poser une question (clé ANTHROPIC_API_KEY dans .env ; appel payant)
+python -m fire_safety_rag.generation.answer "Combien d'extincteurs dans des locaux de travail ?" --details
+
+# 5. Évaluer la chaîne complète (39 questions, appels payants : ~0,02 $)
+python -m fire_safety_rag.evaluation.answers --limit 3   # essai
+python -m fire_safety_rag.evaluation.answers
 ```
+
+Les questions dont aucun passage n'atteint le seuil de refus (`REFUSAL_MIN_SCORE`)
+sont refusées sans appel au LLM. Chaque appel journalise ses tokens et son coût estimé.
 
 Le premier lancement télécharge le modèle d'embedding (~1 Go) dans le cache
 Hugging Face de l'utilisateur, hors du dépôt.
@@ -106,7 +136,8 @@ Hugging Face de l'utilisateur, hors du dépôt.
 | `embedding/` | Vectorisation des chunks et des questions (modèle local) |
 | `storage/` | Connexion PostgreSQL, schéma des tables, écriture et recherche |
 | `indexing/` | Indexation du corpus dans la base |
-| `evaluation/` | Métriques (Hit@k, MRR) et script d'évaluation |
+| `generation/` | Prompt, appel au LLM et journal des coûts, contrôle des citations, commande de réponse |
+| `evaluation/` | Métriques (Hit@k, MRR), évaluation de la recherche, choix du seuil, évaluation des réponses |
 
 ## Obtenir le corpus
 
