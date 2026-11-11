@@ -43,6 +43,7 @@ def _chunk(position: int, valid_until: date | None = None) -> Chunk:
         text=f"Texte du chunk {position}.",
         page_start=position + 1,
         page_end=position + 1,
+        section=f"Chapitre I › Section {position}",  # relue à l'identique (voir plus bas)
     )
 
 

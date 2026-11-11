@@ -1,6 +1,7 @@
 """Tests unitaires et d'intégration pour le module embedder."""
 
 import math
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -38,6 +39,13 @@ class TestFormat:
         chunk = _chunk("GN 1", "Classement des établissements")
         assert format_passage(chunk, "Règlement ERP") == (
             "passage: Règlement ERP — Article GN 1\nClassement des établissements"
+        )
+
+    def test_format_passage_avec_section(self) -> None:
+        """Les parties du document s'intercalent entre le titre et l'article."""
+        chunk = replace(_chunk("R143-39", "Le maire autorise l'ouverture."), section="Chapitre III")
+        assert format_passage(chunk, "CCH") == (
+            "passage: CCH — Chapitre III — Article R143-39\nLe maire autorise l'ouverture."
         )
 
     def test_format_passage_annexe(self) -> None:

@@ -22,7 +22,9 @@ publics et en citant ses sources.
   assez proche, contrôle des numéros cités, coût journalisé.
 - ✅ **Évaluation de la chaîne complète** : 39 questions, voir
   [`docs/evaluation.md`](docs/evaluation.md).
-- 🔄 **Amélioration de la recherche** (reranker), point faible identifié.
+- ✅ **Amélioration de la recherche** : reranker évalué (non retenu, trop lent sur
+  processeur), titres de partie rattachés aux articles (retenu), voir
+  [`docs/evaluation.md`](docs/evaluation.md) section 6.
 - ⏳ À venir : API et interface.
 
 ## Résultats de la chaîne complète
@@ -63,6 +65,11 @@ répond directement, voir [`docs/evaluation.md`](docs/evaluation.md)) :
 | **Vecteurs seuls (retenue)** | **0,45** | **0,69** | **0,72** | **0,57** |
 | Plein texte seul | 0,34 | 0,45 | 0,59 | 0,41 |
 | Hybride (fusion RRF) | 0,45 | 0,62 | 0,66 | 0,53 |
+
+Depuis, avec les titres de partie (Livre, Chapitre, Section…) dans l'en-tête des
+passages et un attendu élargi (q02) : **Hit@1 0,55, Hit@3 0,72, Hit@5 0,72,
+MRR 0,62** (comparaison à attendus identiques dans
+[`docs/evaluation.md`](docs/evaluation.md), section 6.3).
 
 L'hybride n'apporte pas de gain mesuré par rapport aux vecteurs seuls : il n'est
 pas retenu. Le plein texte utilise `ts_rank` normalisé par le

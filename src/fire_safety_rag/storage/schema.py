@@ -4,8 +4,10 @@ Le SQL est exécuté depuis Python, et non depuis db/init/ : Docker n'exécute
 les scripts de db/init/ qu'à la toute première création du volume de données.
 
 Grâce à IF NOT EXISTS, init_schema est idempotente : elle peut être appelée à
-chaque lancement. Limite assumée : elle ne modifie pas une table existante.
-Si le schéma change, supprimer les tables puis tout réindexer (pas d'outil de
+chaque lancement. Limite assumée : CREATE TABLE IF NOT EXISTS ne modifie pas
+une table existante. Une colonne ajoutée après coup l'est par
+ALTER TABLE ... ADD COLUMN IF NOT EXISTS (ex. section) ; pour un changement
+plus profond, supprimer les tables puis tout réindexer (pas d'outil de
 migration tant qu'il n'y en a pas besoin).
 """
 
@@ -41,6 +43,11 @@ CREATE TABLE IF NOT EXISTS chunks (
     search_vector tsvector GENERATED ALWAYS AS (to_tsvector('french', text)) STORED,
     PRIMARY KEY (document_id, position)
 );
+
+-- Ajoutée après coup : ADD COLUMN IF NOT EXISTS met à jour une base existante
+-- sans supprimer les tables. Les anciennes lignes reçoivent '' jusqu'à la
+-- réindexation.
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS section text NOT NULL DEFAULT '';
 """
 
 

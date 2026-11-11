@@ -1,6 +1,6 @@
 id,question,expected,note
 q01,"Dans un bureau de 150 salariés, combien de sorties faut-il et quelle largeur totale ?",code-travail-r4227-incendie:R4227-5,tableau effectif / nombre / largeur
-q02,Les portes de secours doivent-elles s'ouvrir vers l'extérieur ?,code-travail-r4227-incendie:R4227-6,plus de 50 personnes : sens de la sortie
+q02,Les portes de secours doivent-elles s'ouvrir vers l'extérieur ?,code-travail-r4227-incendie:R4227-6;arrete-1980-06-25-reglement-securite-erp:CO 45,plus de 50 personnes : sens de la sortie (travail R4227-6 ; ERP CO 45)
 q03,Combien d'extincteurs faut-il prévoir dans des locaux de travail ?,code-travail-r4227-incendie:R4227-29,1 pour 200 m² et 1 par niveau
 q04,À partir de combien de personnes une alarme incendie est-elle obligatoire au travail ?,code-travail-r4227-incendie:R4227-34,plus de 50 personnes
 q05,À quelle fréquence faut-il faire des exercices incendie avec les salariés ?,code-travail-r4227-incendie:R4227-39,au moins tous les six mois

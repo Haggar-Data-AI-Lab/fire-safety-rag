@@ -126,8 +126,8 @@ fire-safety-rag/
 
 - **Phase 0 — Socle :** dépôt, `.venv`, structure, configuration, premier test, GitHub Actions. ✅
 - **Phase 1 — Ingestion :** extraction, découpage, métadonnées, hash, stockage pgvector, logs. ✅
-- **Phase 2 — RAG minimal :** question → passages → réponse avec citations, en ligne de commande.
-- **Phase 3 — Évaluation :** jeu de questions, script de mesure, premiers résultats chiffrés. 🔄 Évaluation de la *recherche* avancée avant la Phase 2 : la qualité des passages retrouvés conditionne celle des réponses, autant la mesurer et l'améliorer d'abord. Résultats (29 questions) : référence Hit@5 = 0,59, MRR = 0,44 ; avec le titre court du document dans l'en-tête des chunks, Hit@5 = 0,66, MRR = 0,52. Recherche hybride (plein texte PostgreSQL + vecteurs, fusion RRF) évaluée : Hit@5 = 0,62, MRR = 0,49, non retenue car elle ne dépasse pas les vecteurs seuls. Prochaine étape : Phase 2 ; un reranker pourra être évalué ensuite. L'évaluation des *réponses* (fidélité, refus justifiés) viendra avec la Phase 2.
+- **Phase 2 — RAG minimal :** question → passages → réponse avec citations, en ligne de commande. ✅
+- **Phase 3 — Évaluation :** jeu de questions, script de mesure, résultats chiffrés. ✅ Recherche (29 questions) : vecteurs seuls retenus, hybride et reranker évalués mais non retenus, titres de partie ajoutés à l'en-tête des passages (Hit@5 = 0,72, MRR = 0,62). Chaîne complète (39 questions) : 10/10 refus justifiés hors corpus, aucune règle inventée ; point faible : la recherche, face au déséquilibre du corpus (83 % de passages ERP). Détail dans `docs/evaluation.md`.
 - **Phase 4 — Interfaces :** API FastAPI, interface Streamlit.
 - **Phase 5 — Industrialisation :** Docker, README complet, démo en ligne.
 - **Phase 6 — Valorisation :** ligne de CV, post LinkedIn, préparation de la démo pour les entretiens.

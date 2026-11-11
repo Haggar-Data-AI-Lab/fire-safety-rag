@@ -33,6 +33,7 @@ def test_colonnes_attendues(connection: Connection) -> None:
     assert ("chunks", "position") in columns
     assert ("chunks", "history") in columns
     assert ("chunks", "embedding") in columns
+    assert ("chunks", "section") in columns
 
 
 def test_colonne_embedding_en_768_dimensions(connection: Connection) -> None:
