@@ -25,7 +25,10 @@ publics et en citant ses sources.
 - ✅ **Amélioration de la recherche** : reranker évalué (non retenu, trop lent sur
   processeur), titres de partie rattachés aux articles (retenu), voir
   [`docs/evaluation.md`](docs/evaluation.md) section 6.
-- ⏳ À venir : API et interface.
+- ✅ **API HTTP** (FastAPI) : `POST /questions`, schéma de la base vérifié au démarrage.
+- ✅ **Interface web** (Streamlit) : question, réponse, sources numérotées ; elle passe
+  par l'API.
+- ⏳ À venir : conteneurisation de l'application et démo en ligne.
 
 ## Résultats de la chaîne complète
 
@@ -87,7 +90,7 @@ Prérequis : Python 3.11+, Docker Desktop.
 # Environnement Python
 python -m venv .venv
 .venv\Scripts\Activate.ps1        # Windows PowerShell
-pip install -e ".[dev,embeddings]"   # "embeddings" installe PyTorch (lourd)
+pip install -e ".[dev,embeddings,ui]"   # "embeddings" : PyTorch ; "ui" : Streamlit (lourds)
 
 # Configuration : copier le modèle puis définir un vrai mot de passe
 cp .env.example .env
@@ -129,6 +132,27 @@ python -m fire_safety_rag.evaluation.answers --limit 3   # essai
 python -m fire_safety_rag.evaluation.answers
 ```
 
+### API et interface web
+
+Deux terminaux (environnement activé, base démarrée, clé `ANTHROPIC_API_KEY` dans `.env`) :
+
+```bash
+# Terminal 1 : l'API (prête quand "Application startup complete." s'affiche)
+uvicorn fire_safety_rag.api.main:app
+# -> documentation interactive : http://127.0.0.1:8000/docs
+
+# Terminal 2 : l'interface web, qui appelle l'API (adresse réglée par API_URL)
+streamlit run app/streamlit_app.py
+# -> http://localhost:8501
+```
+
+Au démarrage, l'API vérifie que le schéma de la base correspond au code (sans le
+modifier) : s'il est en retard, elle s'arrête et indique de relancer l'indexeur.
+
+```text
+Navigateur -> Streamlit (8501) -> API FastAPI (8000) -> PostgreSQL + e5 + Claude
+```
+
 Les questions dont aucun passage n'atteint le seuil de refus (`REFUSAL_MIN_SCORE`)
 sont refusées sans appel au LLM. Chaque appel journalise ses tokens et son coût estimé.
 
@@ -145,6 +169,12 @@ Hugging Face de l'utilisateur, hors du dépôt.
 | `indexing/` | Indexation du corpus dans la base |
 | `generation/` | Prompt, appel au LLM et journal des coûts, contrôle des citations, commande de réponse |
 | `evaluation/` | Métriques (Hit@k, MRR), évaluation de la recherche, choix du seuil, évaluation des réponses |
+| `reranking/` | Reclassement par cross-encodeur (évalué, désactivé par défaut) |
+| `api/` | API FastAPI : routes, démarrage (schéma, préchauffage), connexion par requête |
+| `ui/` | Client HTTP de l'API, utilisé par l'interface |
+
+L'interface Streamlit elle-même est dans [`app/streamlit_app.py`](app/streamlit_app.py)
+(affichage seulement, aucune logique de recherche).
 
 ## Obtenir le corpus
 

@@ -93,20 +93,26 @@ fire-safety-rag/
 ├── db/init/                # scripts SQL exécutés au premier démarrage
 ├── data/
 │   ├── sources.csv         # catalogue du corpus (versionné)
-│   ├── eval/questions.csv  # jeu de questions d'évaluation (versionné)
+│   ├── eval/               # questions d'évaluation et hors corpus (versionnées)
 │   ├── raw/                # documents sources (non versionnés)
 │   └── processed/          # données produites (non versionnées)
+├── docs/                   # synthèse de l'évaluation
+├── app/streamlit_app.py    # interface web (appelle l'API)
 ├── src/fire_safety_rag/
 │   ├── config.py
 │   ├── ingestion/          # extraction, découpage en articles et en chunks
 │   ├── embedding/          # vectorisation (modèle local)
 │   ├── storage/            # PostgreSQL : connexion, schéma, écriture, recherche
 │   ├── indexing/           # indexation du corpus avec empreinte par document
-│   └── evaluation/         # métriques et script d'évaluation de la recherche
+│   ├── generation/         # prompt, appel au LLM, citations, commande de réponse
+│   ├── reranking/          # reranker (évalué, désactivé par défaut)
+│   ├── evaluation/         # métriques, évaluation de la recherche et des réponses
+│   ├── api/                # API FastAPI
+│   └── ui/                 # client HTTP de l'API pour l'interface
 └── tests/
 ```
 
-À venir, au fil des phases : modules `generation/` et `api/` dans `src/fire_safety_rag/`, interface Streamlit dans `app/`, journaux dans `logs/` (non versionnés).
+Les notes de travail (`notes/`) ne sont pas versionnées.
 
 ## 7. Sécurité et bonnes pratiques
 
@@ -128,7 +134,7 @@ fire-safety-rag/
 - **Phase 1 — Ingestion :** extraction, découpage, métadonnées, hash, stockage pgvector, logs. ✅
 - **Phase 2 — RAG minimal :** question → passages → réponse avec citations, en ligne de commande. ✅
 - **Phase 3 — Évaluation :** jeu de questions, script de mesure, résultats chiffrés. ✅ Recherche (29 questions) : vecteurs seuls retenus, hybride et reranker évalués mais non retenus, titres de partie ajoutés à l'en-tête des passages (Hit@5 = 0,72, MRR = 0,62). Chaîne complète (39 questions) : 10/10 refus justifiés hors corpus, aucune règle inventée ; point faible : la recherche, face au déséquilibre du corpus (83 % de passages ERP). Détail dans `docs/evaluation.md`.
-- **Phase 4 — Interfaces :** API FastAPI, interface Streamlit.
+- **Phase 4 — Interfaces :** API FastAPI, interface Streamlit. ✅ L'interface appelle l'API en HTTP ; l'API vérifie le schéma de la base au démarrage.
 - **Phase 5 — Industrialisation :** Docker, README complet, démo en ligne.
 - **Phase 6 — Valorisation :** ligne de CV, post LinkedIn, préparation de la démo pour les entretiens.
 
