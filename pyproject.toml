@@ -14,10 +14,15 @@ dependencies = [
     # SDK officiel Anthropic (appel au LLM). 2.3 (2026-10-23) plutôt que les
     # versions suivantes, publiées il y a moins de deux semaines.
     "anthropic>=2.3,<2.4",
+    # API HTTP. Version exacte : en 0.x, une version mineure peut casser l'API ;
+    # 0.162.0 (2026-10-23) plutôt que 0.162.1+, publiées il y a moins de deux semaines.
+    "fastapi==0.162.0",
     "pgvector>=0.5,<0.6",
     "psycopg[binary]>=3.3,<3.4",
     "pydantic-settings>=2.0",
     "pypdf>=5.0",
+    # Serveur de l'API (0.54.0 publiée le 2026-09-25).
+    "uvicorn>=0.54,<0.55",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +30,9 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    # Client HTTP du TestClient de FastAPI (tests de l'API). Absent sinon de la CI :
+    # anthropic utilise httpx2, et httpx ne vient qu'avec l'extra "embeddings".
+    "httpx>=0.28,<0.29",
 ]
 # Calcul local des embeddings (installe PyTorch, lourd) : volontairement séparé
 # des dépendances principales pour que la CI reste légère.
