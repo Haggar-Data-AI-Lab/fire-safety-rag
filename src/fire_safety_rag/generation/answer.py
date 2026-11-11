@@ -113,6 +113,32 @@ def answer_question(
     return Answer(question, status, results, threshold, response, checked)
 
 
+def answer_warnings(answer: Answer) -> list[str]:
+    """Avertissements à montrer avec la réponse (partagés par la CLI et l'API).
+
+    Args:
+        answer: résultat de answer_question.
+
+    Returns:
+        Réponse coupée, citations inconnues, absence de source ; liste vide si
+        le LLM n'a pas été appelé ou si tout est en ordre.
+    """
+    if answer.checked is None or answer.response is None:
+        return []
+    warnings: list[str] = []
+    if answer.status == INCOMPLETE:
+        reason = answer.response.stop_reason or "inconnue"
+        warnings.append(f"Réponse incomplète ({_STOP_REASONS.get(reason, f'arrêt : {reason}')}).")
+    if answer.status != REFUSED_BY_LLM:
+        warnings.extend(
+            f"Citation [{number}] inconnue : réponse à vérifier."
+            for number in answer.checked.invalid_numbers
+        )
+        if answer.checked.uncited:
+            warnings.append("Aucune source citée : réponse à vérifier.")
+    return warnings
+
+
 def format_answer(answer: Answer, details: bool = False) -> str:
     """Met en forme le résultat pour l'affichage en ligne de commande.
 
@@ -133,16 +159,8 @@ def format_answer(answer: Answer, details: bool = False) -> str:
     elif answer.checked is not None and answer.response is not None:
         checked = answer.checked
         lines.append(checked.text.strip())
-        if answer.status == INCOMPLETE:
-            reason = answer.response.stop_reason or "inconnue"
-            lines.append(
-                f"⚠ Réponse incomplète ({_STOP_REASONS.get(reason, f'arrêt : {reason}')})."
-            )
+        lines.extend(f"⚠ {warning}" for warning in answer_warnings(answer))
         if answer.status != REFUSED_BY_LLM:
-            for number in checked.invalid_numbers:
-                lines.append(f"⚠ Citation [{number}] inconnue : réponse à vérifier.")
-            if checked.uncited:
-                lines.append("⚠ Aucune source citée : réponse à vérifier.")
             if checked.sources:
                 lines.append("")
                 lines.append("Sources :")
