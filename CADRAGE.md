@@ -88,7 +88,8 @@ fire-safety-rag/
 ├── README.md, CADRAGE.md, CLAUDE.md, LICENSE
 ├── pyproject.toml          # dépendances et configuration des outils
 ├── .env.example            # modèle de configuration, sans secret
-├── docker-compose.yml      # PostgreSQL + pgvector
+├── docker-compose.yml      # PostgreSQL + pgvector, API, interface
+├── Dockerfile, .dockerignore  # image de l'application (API et interface)
 ├── .github/workflows/      # intégration continue (ruff, mypy, pytest)
 ├── db/init/                # scripts SQL exécutés au premier démarrage
 ├── data/
@@ -135,7 +136,7 @@ Les notes de travail (`notes/`) ne sont pas versionnées.
 - **Phase 2 — RAG minimal :** question → passages → réponse avec citations, en ligne de commande. ✅
 - **Phase 3 — Évaluation :** jeu de questions, script de mesure, résultats chiffrés. ✅ Recherche (29 questions) : vecteurs seuls retenus, hybride et reranker évalués mais non retenus, titres de partie ajoutés à l'en-tête des passages (Hit@5 = 0,72, MRR = 0,62). Chaîne complète (39 questions) : 10/10 refus justifiés hors corpus, aucune règle inventée ; point faible : la recherche, face au déséquilibre du corpus (83 % de passages ERP). Détail dans `docs/evaluation.md`.
 - **Phase 4 — Interfaces :** API FastAPI, interface Streamlit. ✅ L'interface appelle l'API en HTTP ; l'API vérifie le schéma de la base au démarrage.
-- **Phase 5 — Industrialisation :** Docker, README complet, démo en ligne.
+- **Phase 5 — Industrialisation :** Docker, README complet, démo en ligne. 🔄 Docker fait : `docker compose up` lance la base, l'API et l'interface (image sans secret, PyTorch CPU). Reste : démo en ligne.
 - **Phase 6 — Valorisation :** ligne de CV, post LinkedIn, préparation de la démo pour les entretiens.
 
 ## 10. Environnement

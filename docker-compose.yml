@@ -17,5 +17,57 @@ services:
       retries: 5
       start_period: 10s
 
+  # API : image construite depuis le Dockerfile ; secrets lus dans .env au lancement.
+  api:
+    build: .
+    image: fire-safety-rag-app
+    env_file: .env
+    environment:
+      # Dans le réseau Docker, la base s'appelle "db" et écoute sur 5432
+      # (POSTGRES_PORT de .env est le port publié sur la machine, pas celui-ci).
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - hf_cache:/home/app/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Premier démarrage : téléchargement du modèle e5 (~1 Go)
+      start_period: 300s
+
+  # Interface web : même image, autre commande. Pas de .env : elle n'a besoin
+  # d'aucun secret, seulement de l'adresse de l'API.
+  ui:
+    # Même construction que l'API : la seconde est reprise entièrement du cache.
+    build: .
+    image: fire-safety-rag-app
+    command:
+      - "streamlit"
+      - "run"
+      - "app/streamlit_app.py"
+      - "--server.address=0.0.0.0"
+      - "--server.port=8501"
+      - "--server.headless=true"
+      - "--browser.gatherUsageStats=false"
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   db_data:
+  hf_cache:

@@ -1,0 +1,16 @@
+# Fichiers exclus du contexte de construction de l'image Docker.
+# Liste fermée : tout est exclu, puis seul le nécessaire est réintégré.
+# Ainsi, aucun secret (.env), aucune note ni aucun document source ne peut
+# entrer dans l'image par erreur, même si un nouveau fichier apparaît.
+*
+
+!pyproject.toml
+!README.md
+!src/
+!app/
+!data/sources.csv
+
+# Caches Python éventuellement présents dans les dossiers réintégrés
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info

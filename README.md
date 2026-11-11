@@ -28,7 +28,8 @@ publics et en citant ses sources.
 - ✅ **API HTTP** (FastAPI) : `POST /questions`, schéma de la base vérifié au démarrage.
 - ✅ **Interface web** (Streamlit) : question, réponse, sources numérotées ; elle passe
   par l'API.
-- ⏳ À venir : conteneurisation de l'application et démo en ligne.
+- ✅ **Conteneurisation** : base, API et interface lancées ensemble par Docker Compose.
+- ⏳ À venir : démo en ligne.
 
 ## Résultats de la chaîne complète
 
@@ -82,7 +83,29 @@ Principaux échecs restants : questions sur le Code du travail ou le Code de la
 construction captées par le règlement ERP (83 % des chunks), et articles SSIAP
 généraux (4, 5, 6) classés devant l'article ou l'annexe attendus.
 
-## Démarrage rapide
+## Lancer avec Docker (base + API + interface)
+
+Prérequis : Docker Desktop, le corpus déjà indexé dans la base (voir « Utilisation »)
+et un fichier `.env` complet (mot de passe de la base, clé `ANTHROPIC_API_KEY`).
+
+```bash
+docker compose up -d --build     # construit l'image puis démarre db, api et ui
+docker compose ps                # api "healthy", ui "Up"
+docker compose logs -f api       # journaux de l'API (dont le coût de chaque appel)
+```
+
+- Interface : http://localhost:8501 — API : http://127.0.0.1:8000/docs
+- Premier lancement : quelques minutes (construction de l'image, puis téléchargement
+  du modèle d'embedding, ~1 Go, gardé ensuite dans le volume `hf_cache`).
+- Arrêt : `docker compose down`. Ne pas ajouter `-v` : cette option supprime les
+  volumes, donc la base indexée et le modèle téléchargé.
+- Après une modification du code : `docker compose up -d --build`.
+
+Une seule image sert aux deux services ; seule la commande change. L'image ne
+contient aucun secret : seul le service `api` reçoit `.env`, au lancement.
+L'interface n'a besoin que de l'adresse de l'API (`API_URL=http://api:8000`).
+
+## Démarrage rapide (développement, sans Docker pour l'application)
 
 Prérequis : Python 3.11+, Docker Desktop.
 
