@@ -40,6 +40,12 @@ dev = [
 embeddings = [
     "sentence-transformers>=6.1,<6.2",
 ]
+# Interface web (lourde : pandas, pyarrow…), inutile à l'API et à la CI.
+# 1.66.1 (2026-10-21) plutôt que 1.67.0, publiée le 2026-11-05.
+ui = [
+    "streamlit>=1.66.1,<1.67",
+    "httpx>=0.28,<0.29",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -59,11 +65,11 @@ select = ["E", "W", "F", "I", "B", "UP"]
 python_version = "3.11"
 strict = true
 mypy_path = "src"
-files = ["src", "tests"]
+files = ["src", "tests", "app"]
 plugins = ["pydantic.mypy"]
 
-# sentence-transformers est optionnel (extra "embeddings") et absent de la CI :
+# sentence-transformers et streamlit sont optionnels (extras) et absents de la CI :
 # sans cette règle, mypy y échouerait sur "module introuvable".
 [[tool.mypy.overrides]]
-module = ["sentence_transformers", "sentence_transformers.*"]
+module = ["sentence_transformers", "sentence_transformers.*", "streamlit", "streamlit.*"]
 ignore_missing_imports = true

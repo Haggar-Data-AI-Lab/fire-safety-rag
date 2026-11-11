@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     postgres_host: str = "127.0.0.1"
     postgres_port: int = 5432
 
+    # Adresse de l'API, utilisée par l'interface Streamlit. Dans Docker
+    # (phase 5), ce sera le nom du service : http://api:8000.
+    api_url: str = "http://127.0.0.1:8000"
+
 
 @lru_cache
 def get_settings() -> Settings:

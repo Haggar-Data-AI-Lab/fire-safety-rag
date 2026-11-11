@@ -19,6 +19,7 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     monkeypatch.delenv("REFUSAL_MIN_SCORE", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("API_URL", raising=False)
     for name in ("USER", "PASSWORD", "DB", "HOST", "PORT"):
         monkeypatch.delenv(f"POSTGRES_{name}", raising=False)
     get_settings.cache_clear()
@@ -37,6 +38,7 @@ def test_defaults_without_env_file() -> None:
     assert settings.llm_model == "claude-haiku-5-5"
     assert settings.llm_effort == "low"
     assert settings.anthropic_api_key is None
+    assert settings.api_url == "http://127.0.0.1:8000"
 
 
 def test_refusal_min_score_depuis_env(monkeypatch: pytest.MonkeyPatch) -> None:
