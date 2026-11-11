@@ -32,6 +32,10 @@ répondait directement (articles 5 et 4 de l'arrêté SSIAP). Ces articles sont
 désormais acceptés. Les mesures antérieures du README étaient calculées avec
 les attendus d'origine et ne sont pas comparables ligne à ligne.
 
+Ce tableau décrit l'index évalué avec la chaîne complète. La recherche actuelle
+(sections de document dans l'en-tête, attendus de q02 élargis) est mesurée en
+section 6.3 : Hit@1 0,55, Hit@5 0,72, MRR 0,62.
+
 ## 2. Seuil de refus
 
 Le meilleur score de chaque question, dans trois groupes :
@@ -121,10 +125,106 @@ Pistes, par ordre de priorité :
 
 1. **Reranker** : relire la question et chaque passage ensemble pour mieux
    classer les candidats ; les scores cosinus actuels sont trop serrés pour
-   distinguer le bon article d'un article voisin.
+   distinguer le bon article d'un article voisin. *Testé depuis : voir la
+   section 6.*
 2. **Consigne** : demander au LLM de vérifier que le type d'établissement visé
    par un article correspond à la question, avant de l'appliquer.
 3. **Corpus** : rééquilibrer en ajoutant des textes (objectif de 10 à 20 documents).
+
+## 6. Améliorations de la recherche testées
+
+Les sections 1 à 5 décrivent la chaîne telle qu'évaluée début novembre. Cette
+section suit les pistes de la conclusion. Recherche seule, 29 questions.
+
+### 6.1 Reranker (cross-encodeur local) : non retenu
+
+Le reranker relit la question avec chacun des N premiers passages vectoriels et
+les reclasse. Il note chaque couple indépendamment des autres : les notes des
+30 candidats, enregistrées une fois (`evaluate --save-candidates`), permettent
+de recalculer hors ligne le résultat pour 5 à 30 candidats
+(`python -m fire_safety_rag.evaluation.candidates`). Seul le temps est alors
+estimé (au prorata), pas mesuré. Processeur seul, 8 cœurs, sans carte graphique.
+
+| Configuration | Hit@1 | Hit@3 | Hit@5 | MRR | Temps / question |
+|---|---|---|---|---|---|
+| Vecteurs seuls | 0,45 | 0,69 | 0,72 | 0,57 | 0,1 s |
+| `BAAI/bge-reranker-v2-m3`, 30 candidats | 0,66 | 0,76 | 0,83 | 0,72 | 43,8 s (mesuré) |
+| `BAAI/bge-reranker-v2-m3`, 5 candidats | 0,59 | 0,69 | 0,72 | 0,64 | ~7 s (estimé) |
+| `mmarco-mMiniLMv2-L12-H384-v1`, 30 candidats | 0,55 | 0,72 | 0,76 | 0,63 | 4,2 s (mesuré) |
+| `mmarco-mMiniLMv2-L12-H384-v1`, 5 candidats | 0,59 | 0,72 | 0,72 | 0,65 | ~0,7 s (estimé) |
+
+- bge améliore nettement la recherche, mais 44 s par question le rend
+  inutilisable en interactif sur processeur.
+- mMiniLM est 10 fois plus rapide, mais ne profite pas de candidats
+  supplémentaires : son meilleur réglage est 5 candidats.
+- Le LLM reçoit 5 passages : avec 5 candidats, le reranker ne change que leur
+  **ordre**, pas leur contenu. Seul bge à 30 candidats élargit le contexte
+  (Hit@5 0,72 → 0,83).
+
+Le reranker reste dans le code, désactivé par défaut (`RERANKER_MODEL` vide),
+et pourra être réévalué avec une carte graphique ou une version ONNX.
+
+### 6.2 Diagnostic du rappel
+
+Pour 5 questions, aucun article attendu ne figurait parmi les 30 premiers
+passages vectoriels : aucun reranker ne pouvait les retrouver. Rang de
+l'article attendu jusqu'à 200 (`evaluate --k 200`) :
+
+| Question | Vecteurs | Plein texte | Cause probable (relecture des passages) |
+|---|---|---|---|
+| q02 portes vers l'extérieur | 51 | > 200 | Vocabulaire : l'article dit « dans le sens de la sortie » ; et CO 45 (ERP) répond aussi |
+| q19 catégorie d'un ERP | 40 | 5 | Article général du CCH noyé parmi les articles ERP |
+| q20 qui autorise l'ouverture | > 200 | 17 | « Le maire autorise l'ouverture… » : ni « ERP » ni « établissement » dans l'article |
+| q22 contenu du registre | > 200 | 37 | Articles généraux noyés parmi les nombreux articles ERP sur le registre |
+| q26 fréquence des visites | 46 | 9 | La réponse (GE 4) est un tableau devenu illisible à l'extraction du PDF |
+
+La relecture a aussi montré un défaut du découpage : les titres de partie
+(« Section 3 : Registre de sécurité incendie (Articles R141-10 à R141-11) »)
+étaient collés à la **fin de l'article précédent**, au lieu de donner leur
+contexte aux articles suivants (plusieurs centaines d'articles concernés,
+surtout dans le règlement ERP).
+
+CO 45 a été ajouté aux attendus de q02 : la question ne précise pas s'il s'agit
+d'un lieu de travail ou d'un ERP, et CO 45 donne la même règle pour les ERP.
+
+### 6.3 Titres de partie rattachés aux articles : retenu
+
+Les titres sont retirés de la fin des articles et forment la `section` des
+articles suivants (ex. « Chapitre III : ÉTABLISSEMENTS RECEVANT DU PUBLIC ›
+Section 2 : Classement des établissements »), ajoutée à l'en-tête du texte
+vectorisé. Comparaison à attendus identiques (CO 45 inclus) :
+
+| Index | Hit@1 | Hit@3 | Hit@5 | MRR |
+|---|---|---|---|---|
+| Avant (1907 passages) | 0,45 | 0,72 | 0,76 | 0,58 |
+| **Avec les sections (1898 passages, retenu)** | **0,55** | **0,72** | **0,72** | **0,62** |
+
+- Mieux classées : q01 (absente → rang 3), q02, q07, q18, q29 (→ rang 1),
+  q14, q21.
+- Moins bien classées : q23 (1 → absente), q27 (2 → absente), q12 (2 → 3).
+- **Les trois questions visées (q19, q20, q22) restent absentes.** Explication
+  probable, non vérifiée : les passages ERP reçoivent eux aussi un en-tête qui
+  mentionne les établissements recevant du public (« Livre Ier : Dispositions
+  applicables à tous les établissements recevant du public »).
+
+Retenu pour le gain en tête de classement et parce que le texte des articles
+est désormais propre, malgré une question de moins dans le top 5 (l'écart
+reste dans le bruit : une question vaut 0,034).
+
+Le seuil de refus, lié aux vecteurs, a été remesuré après la réindexation : le
+seuil de 0,84 est conservé. Aucune question trouvée n'est refusée (0 / 21), et
+7 questions hors corpus sur 10 sont refusées sans appel au LLM (6 avant). La
+question trouvée la plus basse (q01, 0,8467) est à 0,007 au-dessus du seuil ;
+la question hors corpus la plus haute (h01, 0,8446) passe juste au-dessus et
+reste confiée au LLM. Un seuil à 0,845 refuserait h01, mais avec une marge de
+0,002 sur q01 : trop fragile pour être retenu.
+
+### Bilan
+
+Le frein principal reste le **déséquilibre du corpus** (83 % de passages ERP)
+face aux questions générales sur les ERP, dont les réponses sont dans le CCH.
+Pistes non testées : ajouter des documents, filtrer ou réserver des places par
+document, réparer l'extraction des tableaux.
 
 ## Limites de cette évaluation
 
