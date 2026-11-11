@@ -1,4 +1,4 @@
-"""Tests d'intégration du schéma (sautés si la base est injoignable).
+"""Tests du schéma ; ceux qui utilisent la base sont sautés si elle est injoignable.
 
 La fixture `connection` est définie dans conftest.py.
 """
@@ -7,8 +7,16 @@ from datetime import date
 from typing import Any
 
 import psycopg
+import pytest
 
-from fire_safety_rag.storage.schema import EMBEDDING_DIMENSION, init_schema
+from fire_safety_rag.storage.schema import (
+    EMBEDDING_DIMENSION,
+    EXPECTED_COLUMNS,
+    SchemaError,
+    check_schema,
+    init_schema,
+    missing_columns,
+)
 
 Connection = psycopg.Connection[tuple[Any, ...]]
 
@@ -94,3 +102,36 @@ def test_suppression_document_supprime_ses_chunks(connection: Connection) -> Non
         ).fetchone()
 
         assert row == (0,)
+
+
+def test_missing_columns_schema_complet() -> None:
+    """Toutes les colonnes attendues présentes : rien ne manque (sans base)."""
+    existing = {(table, column) for table, cols in EXPECTED_COLUMNS.items() for column in cols}
+    assert missing_columns(existing) == []
+
+
+def test_missing_columns_signale_la_colonne_absente() -> None:
+    """Une base d'avant la colonne section : seule chunks.section est signalée."""
+    existing = {(table, column) for table, cols in EXPECTED_COLUMNS.items() for column in cols}
+    existing.discard(("chunks", "section"))
+    assert missing_columns(existing) == ["chunks.section"]
+
+
+def test_check_schema_apres_init_schema(connection: Connection) -> None:
+    """Après init_schema, le schéma de la vraie base est jugé complet."""
+    init_schema(connection)
+    check_schema(connection)
+
+
+def test_check_schema_erreur_explicite() -> None:
+    """Le message nomme les colonnes manquantes et la commande à lancer."""
+
+    class FakeConnection:
+        def execute(self, query: str, params: object) -> "FakeConnection":
+            return self
+
+        def fetchall(self) -> list[tuple[str, str]]:
+            return [("documents", "document_id")]
+
+    with pytest.raises(SchemaError, match=r"chunks\.section.*indexing\.indexer"):
+        check_schema(FakeConnection())  # type: ignore[arg-type]

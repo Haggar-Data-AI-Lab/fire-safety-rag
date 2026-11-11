@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fire_safety_rag.api.main import Answerer, app, get_answerer
+from fire_safety_rag.config import Settings
 from fire_safety_rag.generation.answer import DISCLAIMER, Answer, answer_question
 from fire_safety_rag.generation.llm import LLMError, LLMResponse
 from fire_safety_rag.generation.prompt import REFUSAL_SENTENCE, Prompt
@@ -56,6 +57,13 @@ def client() -> Iterator[Callable[[Answerer], TestClient]]:
 
     yield make
     app.dependency_overrides.clear()
+
+
+def test_racine_redirige_vers_la_documentation() -> None:
+    """GET / redirige vers /docs (sans suivre la redirection)."""
+    response = TestClient(app).get("/", follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers["location"] == "/docs"
 
 
 def test_health() -> None:
@@ -119,7 +127,19 @@ def test_echec_du_llm_donne_503(client: Callable[[Answerer], TestClient]) -> Non
     assert response.json() == {"detail": "Le service de génération est indisponible."}
 
 
-def test_chaine_non_branchee_donne_503() -> None:
-    """Sans remplacement, l'étape 1 répond 503 : la chaîne n'est pas encore branchée."""
+def test_api_non_initialisee_donne_503() -> None:
+    """Sans démarrage (lifespan non exécuté) ni remplacement : 503, pas d'erreur 500."""
     response = TestClient(app).post("/questions", json={"question": "Question ?"})
     assert response.status_code == 503
+    assert response.json() == {"detail": "Service non initialisé."}
+
+
+def test_base_injoignable_donne_503() -> None:
+    """Base injoignable au moment de la requête : 503 au message générique."""
+    app.state.settings = Settings(postgres_password="x", postgres_host="127.0.0.1", postgres_port=1)
+    try:
+        response = TestClient(app).post("/questions", json={"question": "Question ?"})
+    finally:
+        del app.state.settings
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Base de données indisponible."}

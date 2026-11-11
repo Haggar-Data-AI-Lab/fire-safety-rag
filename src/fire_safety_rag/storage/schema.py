@@ -66,3 +66,72 @@ def init_schema(connection: psycopg.Connection[tuple[Any, ...]]) -> None:
     """
     connection.execute(SCHEMA_SQL)
     connection.commit()
+
+
+# Colonnes dont le code a besoin, par table (à tenir à jour avec SCHEMA_SQL).
+EXPECTED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "documents": ("document_id", "content_hash", "embedding_model", "indexed_at"),
+    "chunks": (
+        "document_id",
+        "position",
+        "article_id",
+        "chunk_index",
+        "version",
+        "valid_from",
+        "valid_until",
+        "history",
+        "text",
+        "page_start",
+        "page_end",
+        "embedding",
+        "search_vector",
+        "section",
+    ),
+}
+
+
+class SchemaError(RuntimeError):
+    """Le schéma de la base est en retard sur le code (colonne ou table manquante)."""
+
+
+def missing_columns(existing: set[tuple[str, str]]) -> list[str]:
+    """Liste les colonnes attendues absentes de la base.
+
+    Args:
+        existing: couples (table, colonne) présents dans la base.
+
+    Returns:
+        Colonnes manquantes, sous la forme "table.colonne", dans l'ordre de
+        EXPECTED_COLUMNS ; liste vide si le schéma est complet.
+    """
+    return [
+        f"{table}.{column}"
+        for table, columns in EXPECTED_COLUMNS.items()
+        for column in columns
+        if (table, column) not in existing
+    ]
+
+
+def check_schema(connection: psycopg.Connection[tuple[Any, ...]]) -> None:
+    """Vérifie que la base contient toutes les colonnes attendues, sans la modifier.
+
+    À appeler au démarrage d'un service qui ne fait que lire (l'API) : mettre
+    le schéma à jour reste le rôle de l'indexeur, qui appelle init_schema.
+
+    Args:
+        connection: connexion ouverte (voir storage.database.connect).
+
+    Raises:
+        SchemaError: s'il manque au moins une colonne (ou une table).
+    """
+    rows = connection.execute(
+        "SELECT table_name, column_name FROM information_schema.columns"
+        " WHERE table_schema = current_schema() AND table_name = ANY(%s)",
+        (list(EXPECTED_COLUMNS),),
+    ).fetchall()
+    missing = missing_columns({(table, column) for table, column in rows})
+    if missing:
+        raise SchemaError(
+            f"Schéma de la base en retard sur le code, colonnes manquantes : {', '.join(missing)}."
+            " Lancer l'indexeur pour le mettre à jour : python -m fire_safety_rag.indexing.indexer"
+        )

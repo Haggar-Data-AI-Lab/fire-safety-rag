@@ -1,6 +1,7 @@
 """API HTTP de l'assistant : poser une question, recevoir la réponse et ses sources.
 
 Routes :
+- GET  /           : redirige vers /docs ;
 - GET  /health     : l'API répond ;
 - POST /questions  : {"question": "..."} -> réponse, statut, sources, avertissements.
 - GET  /docs       : documentation interactive générée par FastAPI.
@@ -9,26 +10,40 @@ La route reçoit la fonction « répondre à une question » par injection de
 dépendance (Depends) : les tests la remplacent par une fausse fonction
 (app.dependency_overrides), sans base, sans modèle et sans appel payant.
 
-Étape 1 : la couche HTTP seule. Le branchement réel (base, modèle
-d'embedding, LLM) viendra à l'étape 2 ; d'ici là, POST /questions répond 503.
+Au démarrage (lifespan) : lecture de la configuration, vérification du schéma
+de la base (sans le modifier), chargement des titres, préchauffage du modèle
+d'embedding. Chaque requête ouvre puis ferme sa propre connexion à la base.
+
+Lancement (base Docker démarrée, extra "embeddings" installé, clé API dans .env) :
+    uvicorn fire_safety_rag.api.main:app
 """
 
 import logging
-from collections.abc import Callable
-from typing import Annotated
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager
+from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException
+import psycopg
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, StringConstraints
 
+from fire_safety_rag.config import Settings, get_settings
+from fire_safety_rag.embedding.embedder import embed_query
 from fire_safety_rag.generation.answer import (
     DISCLAIMER,
     REFUSED_BY_LLM,
     REFUSED_BY_SCORE,
     Answer,
+    answer_question,
     answer_warnings,
+    load_titles,
 )
-from fire_safety_rag.generation.llm import LLMError
-from fire_safety_rag.generation.prompt import REFUSAL_SENTENCE
+from fire_safety_rag.generation.llm import LLMError, LLMResponse, generate
+from fire_safety_rag.generation.prompt import REFUSAL_SENTENCE, Prompt
+from fire_safety_rag.storage.database import connect
+from fire_safety_rag.storage.schema import check_schema
+from fire_safety_rag.storage.store import SearchResult, search
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +110,90 @@ def to_response(answer: Answer) -> AnswerResponse:
     )
 
 
-def get_answerer() -> Answerer:
-    """Fournit la fonction de réponse ; branchée sur la vraie chaîne à l'étape 2.
+Connection = psycopg.Connection[tuple[Any, ...]]
+
+# Bibliothèques trop bavardes au niveau INFO (une ligne par requête HTTP ou par lot).
+_NOISY_LOGGERS = ("httpx", "httpx2", "sentence_transformers")
+
+
+def configure_logging(level: str) -> None:
+    """Affiche les journaux du projet (dont le coût de chaque appel au LLM).
+
+    uvicorn ne configure que ses propres journaux : sans cette fonction, les
+    lignes INFO du projet seraient perdues. Les journaux d'uvicorn ne sont pas
+    dupliqués (ils ne remontent pas jusqu'au journal racine).
+
+    Args:
+        level: niveau minimal (ex. "INFO"), lu dans la configuration.
+    """
+    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
+    for noisy in _NOISY_LOGGERS:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Préparation au démarrage de l'API, une seule fois.
+
+    Ordre : configuration, schéma (l'API refuse de démarrer s'il est en
+    retard, plutôt que d'échouer à chaque question), titres des documents,
+    préchauffage du modèle d'embedding (sinon la première question attend
+    son chargement).
 
     Raises:
-        HTTPException: 503 tant que la chaîne n'est pas branchée.
+        SchemaError: si le schéma de la base est en retard sur le code.
     """
-    raise HTTPException(status_code=503, detail="Service non configuré.")
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    with connect(settings) as connection:
+        check_schema(connection)
+    app.state.settings = settings
+    app.state.titles = load_titles()
+    embed_query("préchauffage du modèle")
+    logger.info("API prête (modèle %s)", settings.embedding_model)
+    yield
+
+
+def get_connection(request: Request) -> Iterator[Connection]:
+    """Ouvre une connexion pour la durée d'une requête, puis la ferme.
+
+    Une connexion par requête : plus simple et plus sûr qu'une connexion
+    partagée entre requêtes simultanées ; son ouverture (quelques ms) est
+    négligeable devant l'appel au LLM.
+
+    Raises:
+        HTTPException: 503 si l'API n'a pas été initialisée ou si la base est
+            injoignable.
+    """
+    settings: Settings | None = getattr(request.app.state, "settings", None)
+    if settings is None:
+        raise HTTPException(status_code=503, detail="Service non initialisé.")
+    try:
+        connection = connect(settings)
+    except psycopg.OperationalError:
+        logger.exception("Base de données injoignable")
+        raise HTTPException(status_code=503, detail="Base de données indisponible.") from None
+    with connection:
+        yield connection
+
+
+def get_answerer(
+    request: Request, connection: Annotated[Connection, Depends(get_connection)]
+) -> Answerer:
+    """Assemble la vraie chaîne : recherche vectorielle, seuil de refus, LLM."""
+    settings: Settings = request.app.state.settings
+    titles: dict[str, str] = request.app.state.titles
+
+    def retrieve(question: str, k: int) -> list[SearchResult]:
+        return search(connection, embed_query(question), settings.embedding_model, k=k)
+
+    def llm(prompt: Prompt) -> LLMResponse:
+        return generate(prompt, settings=settings)
+
+    def answer(question: str) -> Answer:
+        return answer_question(question, retrieve, titles, llm, settings.refusal_min_score)
+
+    return answer
 
 
 app = FastAPI(
@@ -111,7 +203,14 @@ app = FastAPI(
         "avec citation des sources. " + DISCLAIMER
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    """Redirige la racine vers la documentation interactive."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health")
