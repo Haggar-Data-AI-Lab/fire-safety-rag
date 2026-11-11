@@ -29,10 +29,14 @@ _QUERY_PREFIX = "query: "
 def format_passage(chunk: Chunk, document_title: str) -> str:
     """Construit le texte à vectoriser pour un chunk.
 
-    Format : préfixe e5, en-tête (titre court du document + article), puis le
-    texte du chunk. Le titre du document aide le modèle à distinguer des
-    articles proches issus de textes différents (ex. Code du travail / ERP).
-    Exemple d'en-tête : "Règlement de sécurité incendie des ERP — Article GN 1".
+    Format : préfixe e5, en-tête (titre court du document, parties du
+    document s'il y en a, article), puis le texte du chunk. Le titre du
+    document aide le modèle à distinguer des articles proches issus de textes
+    différents (ex. Code du travail / ERP) ; les parties donnent le contexte
+    qu'un article court ne rappelle pas (ex. R143-39 « Le maire autorise
+    l'ouverture… » ne dit pas qu'il s'agit d'un ERP).
+    Exemple d'en-tête : "CCH — Chapitre III : ÉTABLISSEMENTS RECEVANT DU PUBLIC
+    › Section 2 : Classement des établissements — Article R143-19".
 
     Args:
         chunk: chunk à vectoriser.
@@ -43,7 +47,8 @@ def format_passage(chunk: Chunk, document_title: str) -> str:
     """
     is_annex = chunk.article_id.startswith("Annexe")
     heading = chunk.article_id if is_annex else f"Article {chunk.article_id}"
-    return f"{_PASSAGE_PREFIX}{document_title} — {heading}\n{chunk.text}"
+    parts = [document_title, chunk.section, heading] if chunk.section else [document_title, heading]
+    return f"{_PASSAGE_PREFIX}{' — '.join(parts)}\n{chunk.text}"
 
 
 def format_query(question: str) -> str:

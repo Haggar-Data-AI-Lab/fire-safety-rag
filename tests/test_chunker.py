@@ -6,9 +6,12 @@ import pytest
 
 from fire_safety_rag.ingestion.chunker import (
     Article,
+    format_sections,
     parse_version,
     split_article,
     split_into_articles,
+    split_trailing_titles,
+    update_sections,
 )
 from fire_safety_rag.ingestion.pdf_extractor import PageText
 
@@ -332,3 +335,78 @@ class TestHistorique:
         )
         assert article.history == ()
         assert "Création d'un registre de sécurité." in article.text
+
+
+class TestTitresDePartie:
+    """Titres de partie (Livre, Chapitre, Section…) collés en fin d'article."""
+
+    def test_titre_sur_une_ligne(self) -> None:
+        """Un titre suivi de sa liste d'articles est repéré, sans la liste."""
+        lines = ["Texte de l'article.", "Section 3 : Registre (Articles R141-10 à R141-11)"]
+        assert split_trailing_titles(lines) == ([("Section", "Section 3 : Registre")], 1)
+
+    def test_plusieurs_titres_sur_plusieurs_lignes(self) -> None:
+        """Un bloc de titres, dont un coupé en deux lignes et un avec parenthèse."""
+        lines = [
+            "Texte.",
+            "Section 2 : Moyens d'extinction (Articles MS 14 à MS 24)",
+            "Sous-section 5 : Colonnes en charge (dites colonnes humides)",
+            "(Articles MS 22 à MS 24)",
+        ]
+        assert split_trailing_titles(lines) == (
+            [
+                ("Section", "Section 2 : Moyens d'extinction"),
+                ("Sous-section", "Sous-section 5 : Colonnes en charge (dites colonnes humides)"),
+            ],
+            3,
+        )
+
+    def test_dernier_titre_sans_liste_d_articles(self) -> None:
+        """Le dernier titre du bloc peut ne pas avoir de liste d'articles."""
+        lines = ["Texte.", "Section 7 : Installations (Article M 24)", "Sous-section 1 : Eclairage"]
+        titles, count = split_trailing_titles(lines)
+        assert [title for _, title in titles] == [
+            "Section 7 : Installations",
+            "Sous-section 1 : Eclairage",
+        ]
+        assert count == 2
+
+    @pytest.mark.parametrize(
+        "last_line",
+        [
+            "titre premier, dispense de l'application des mesures.",  # minuscule
+            "Paragraphe 2. Les documents doivent être fournis.",  # pas de " : "
+            "Section 5 : rappel des règles (voir ci-dessus) puis suite du texte (fin)",
+        ],
+    )
+    def test_texte_ordinaire_non_pris_pour_un_titre(self, last_line: str) -> None:
+        """Une phrase qui commence par un mot-clé n'est pas un titre."""
+        assert split_trailing_titles(["Texte.", last_line]) == ([], 0)
+
+    def test_hierarchie(self) -> None:
+        """Une nouvelle Section remplace l'ancienne et efface la Sous-section."""
+        sections = update_sections(
+            {}, [("Chapitre", "Chapitre III"), ("Section", "Section 1"), ("Sous-section", "SS 1")]
+        )
+        sections = update_sections(sections, [("Section", "Section 2")])
+        assert format_sections(sections) == "Chapitre III › Section 2"
+
+    def test_section_rattachee_aux_articles_suivants(self) -> None:
+        """Le titre collé à la fin d'un article est retiré de son texte et
+        devient la section des articles suivants."""
+        text = (
+            "Article R141-9\n"
+            "VERSION EN VIGUEUR DEPUIS LE 01/07/2026\n"
+            "Les exigences fonctionnelles.\n"
+            "Section 3 : Registre de sécurité incendie (Articles R141-10 à R141-11)\n"
+            "Article R141-10\n"
+            "VERSION EN VIGUEUR DEPUIS LE 01/07/2026\n"
+            "Le registre de sécurité contient les renseignements."
+        )
+        first, second = split_into_articles(_single_page(text))
+
+        assert first.text == "Les exigences fonctionnelles."
+        assert first.line_pages == (1,)
+        assert first.section == ""
+        assert second.section == "Section 3 : Registre de sécurité incendie"
+        assert split_article(second)[0].section == second.section

@@ -55,6 +55,51 @@ _RE_VERSION: re.Pattern[str] = re.compile(
 #   "Transféré par Arrêté du 11 décembre 2009 - art."
 _RE_HISTORY_LINE: re.Pattern[str] = re.compile(r"^(?:Création|Modifié par|Transféré par)\b")
 
+# ---------------------------------------------------------------------------
+# Titres de partie (Livre, Chapitre, Section…)
+# ---------------------------------------------------------------------------
+
+# Niveaux de titre, du plus haut au plus bas. Un nouveau titre remplace celui
+# de même niveau et efface les niveaux inférieurs. "Annexes" (SSIAP) clôt
+# toutes les parties précédentes : il est placé au niveau le plus haut.
+_SECTION_LEVELS: dict[str, int] = {
+    "Livre": 0,
+    "Annexes": 0,
+    "Titre": 1,
+    "Chapitre": 2,
+    "Sous-chapitre": 3,
+    "Section": 4,
+    "Sous-section": 5,
+    "Paragraphe": 6,
+    "Sous-paragraphe": 7,
+}
+_KEYWORDS = "|".join(sorted(_SECTION_LEVELS, key=len, reverse=True))
+
+# Dans les PDF Légifrance, les titres de partie se retrouvent collés à la FIN
+# de l'article qui les précède, suivis de la liste des articles qu'ils couvrent.
+# Exemples observés (parfois sur deux lignes) :
+#   "Section 3 : Registre de sécurité incendie (Articles R141-10 à R141-11)"
+#   "Sous-chapitre III (Article CTS 51)"
+#   "Sous-section 5 : Colonnes en charge (dites colonnes humides)" + "(Articles MS 22 à MS 24)"
+# Le mot-clé est sensible à la casse ("titre premier, dispense..." est une
+# phrase), et le titre doit se terminer par "(Article…)" ou "(Annexe…)".
+_TITLE_WITH_LIST = (
+    rf"({_KEYWORDS})\b((?:[^()]|\((?!Articles?\b|Annexes?\b)[^()]*\))*?)"
+    r"\s*\((?:Articles?|Annexes?)\b[^()]*\)"
+)
+# Dernier titre du bloc, parfois sans liste d'articles : "Section 5 : Installations électriques".
+# Il faut alors un numéro et " : " ("Paragraphe 2. Les documents…" est du texte).
+_TITLE_BARE = rf"({_KEYWORDS}) ((?:\d+|[IVXLC]+|Ier|1er) : [^()]+)"
+# Bloc entier : un ou plusieurs titres, rien d'autre.
+_RE_TITLE_BLOCK: re.Pattern[str] = re.compile(
+    rf"(?:{_TITLE_WITH_LIST}\s*)*(?:{_TITLE_WITH_LIST}|{_TITLE_BARE})"
+)
+# Un titre du bloc : groupes 1-2 (avec liste d'articles) ou 3-4 (sans).
+_RE_TITLE_ITEM: re.Pattern[str] = re.compile(rf"{_TITLE_WITH_LIST}|{_TITLE_BARE}")
+_RE_TITLE_START: re.Pattern[str] = re.compile(rf"^(?:{_KEYWORDS})\b")
+# Au plus ce nombre de lignes en fin d'article est examiné (blocs observés : 1 à 5 lignes).
+_MAX_TITLE_LINES = 12
+
 
 # ---------------------------------------------------------------------------
 # Structures de données
@@ -83,6 +128,9 @@ class Article:
         line_pages: page de chaque ligne de `text`, dans l'ordre (un élément
             par ligne de `text.splitlines()`). Sert à donner leurs vraies
             pages aux morceaux d'un article long.
+        section: parties du document qui contiennent l'article, du plus haut
+            niveau au plus bas (ex. "Chapitre III : … › Section 3 : Registre
+            de sécurité incendie") ; vide si aucun titre n'a été repéré.
     """
 
     document_id: str
@@ -95,6 +143,7 @@ class Article:
     page_start: int
     page_end: int
     line_pages: tuple[int, ...]
+    section: str = ""
 
 
 @dataclass(frozen=True)
@@ -115,6 +164,7 @@ class Chunk:
         text: contenu du morceau.
         page_start: page du PDF de la première ligne du morceau.
         page_end: page du PDF de la dernière ligne du morceau.
+        section: parties du document qui contiennent l'article d'origine.
     """
 
     document_id: str
@@ -127,6 +177,7 @@ class Chunk:
     text: str
     page_start: int
     page_end: int
+    section: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +276,64 @@ def _heading_id(line: str) -> str | None:
     return None
 
 
+def split_trailing_titles(lines: Sequence[str]) -> tuple[list[tuple[str, str]], int]:
+    """Repère le bloc de titres de partie collé à la fin d'un article.
+
+    On cherche la première ligne, parmi les dernières, qui commence par un
+    mot-clé de titre et à partir de laquelle TOUT le reste n'est qu'une suite
+    de titres. Les lignes sont recollées avec une espace (un titre peut tenir
+    sur deux lignes).
+
+    Args:
+        lines: lignes du contenu d'un article (sans lignes vides finales).
+
+    Returns:
+        Couple (titres, nombre de lignes du bloc). Chaque titre est un couple
+        (mot-clé, titre sans la liste d'articles), ex. ("Section",
+        "Section 3 : Registre de sécurité incendie"). ([], 0) si aucun bloc.
+    """
+    for start in range(max(0, len(lines) - _MAX_TITLE_LINES), len(lines)):
+        if not _RE_TITLE_START.match(lines[start]):
+            continue
+        block = " ".join(line for line in lines[start:] if line)
+        if _RE_TITLE_BLOCK.fullmatch(block) is None:
+            continue
+        titles = []
+        for match in _RE_TITLE_ITEM.finditer(block):
+            keyword = match.group(1) or match.group(3)
+            name = match.group(2) if match.group(1) else f" {match.group(4)}"
+            titles.append((keyword, f"{keyword}{name}".strip()))
+        return titles, len(lines) - start
+    return [], 0
+
+
+def update_sections(current: dict[int, str], titles: Sequence[tuple[str, str]]) -> dict[int, str]:
+    """Met à jour la hiérarchie des parties avec de nouveaux titres.
+
+    Un titre remplace celui de même niveau et efface les niveaux inférieurs :
+    une nouvelle Section garde le Livre et le Chapitre, mais pas l'ancienne
+    Sous-section.
+
+    Args:
+        current: titre courant par niveau (voir _SECTION_LEVELS).
+        titles: titres rencontrés, dans l'ordre du document.
+
+    Returns:
+        Nouvelle hiérarchie (current n'est pas modifié).
+    """
+    sections = dict(current)
+    for keyword, title in titles:
+        level = _SECTION_LEVELS[keyword]
+        sections = {lvl: text for lvl, text in sections.items() if lvl < level}
+        sections[level] = title
+    return sections
+
+
+def format_sections(sections: dict[int, str]) -> str:
+    """Chemin des parties, du plus haut niveau au plus bas, séparé par " › "."""
+    return " › ".join(sections[level] for level in sorted(sections))
+
+
 def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
     """Découpe les pages d'un document en articles réglementaires.
 
@@ -236,7 +345,10 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
     sur plusieurs pages.
 
     Le texte situé avant le premier article (titre du document, sommaire)
-    est ignoré.
+    est ignoré : les titres de partie qui y figurent sont donc perdus.
+
+    Les titres de partie (Livre, Chapitre, Section…) collés à la fin d'un
+    article en sont retirés et forment la `section` des articles suivants.
 
     Args:
         pages: pages nettoyées d'un SEUL document, dans l'ordre. Le
@@ -270,6 +382,7 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
 
     # Construction des articles : le contenu s'arrête au titre suivant
     articles: list[Article] = []
+    sections: dict[int, str] = {}  # parties en cours (Livre, Chapitre, Section…)
     for position, (heading_index, article_id, version_index) in enumerate(headings):
         start = version_index + 1
         end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
@@ -287,6 +400,13 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
         while start < end and not lines[start]:
             start += 1
 
+        # Titres de partie collés en fin d'article : retirés du texte, ils
+        # s'appliquent aux articles SUIVANTS
+        titles, title_lines = split_trailing_titles(lines[start:end])
+        end -= title_lines
+        while end > start and not lines[end - 1]:
+            end -= 1
+
         # Dernière ligne non vide de l'article (au minimum, sa ligne de version)
         last_index = end - 1 if end > start else version_index
         valid_from, valid_until = parse_version(lines[version_index])
@@ -303,8 +423,10 @@ def split_into_articles(pages: Sequence[PageText]) -> list[Article]:
                 page_start=line_pages[heading_index],
                 page_end=line_pages[last_index],
                 line_pages=tuple(line_pages[start:end]),
+                section=format_sections(sections),
             )
         )
+        sections = update_sections(sections, titles)
     return articles
 
 
@@ -355,6 +477,7 @@ def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 
                 text=article.text,
                 page_start=article.page_start,
                 page_end=article.page_end,
+                section=article.section,
             )
         ]
 
@@ -394,6 +517,7 @@ def split_article(article: Article, max_chars: int = 1500, overlap_chars: int = 
                 text="\n".join(lines[start:end]),
                 page_start=article.line_pages[start],
                 page_end=article.line_pages[end - 1],
+                section=article.section,
             )
         )
         if end >= len(lines):

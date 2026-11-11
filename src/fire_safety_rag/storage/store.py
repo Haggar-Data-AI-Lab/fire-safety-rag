@@ -20,8 +20,8 @@ _INSERT_DOCUMENT = (
 
 _INSERT_CHUNK = (
     "INSERT INTO chunks (document_id, position, article_id, chunk_index, version,"
-    " valid_from, valid_until, history, text, page_start, page_end, embedding)"
-    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    " valid_from, valid_until, history, text, page_start, page_end, section, embedding)"
+    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
 )
 
 # <=> : distance cosinus de pgvector (0 = même direction, 2 = opposés).
@@ -29,7 +29,7 @@ _INSERT_CHUNK = (
 # de fin arrive (ex. 01/06/2027) disparaît des résultats sans réindexation.
 _SEARCH = """
 SELECT c.document_id, c.article_id, c.version, c.valid_from, c.valid_until,
-       c.history, c.chunk_index, c.text, c.page_start, c.page_end,
+       c.history, c.chunk_index, c.text, c.page_start, c.page_end, c.section,
        c.embedding <=> %(query)s AS distance
 FROM chunks AS c
 JOIN documents AS d USING (document_id)
@@ -48,7 +48,7 @@ WITH q AS (
     SELECT replace(plainto_tsquery('french', %(question)s)::text, '&', '|')::tsquery AS query
 )
 SELECT c.document_id, c.article_id, c.version, c.valid_from, c.valid_until,
-       c.history, c.chunk_index, c.text, c.page_start, c.page_end,
+       c.history, c.chunk_index, c.text, c.page_start, c.page_end, c.section,
        ts_rank(c.search_vector, q.query, 1) AS rank
 FROM chunks AS c
 JOIN documents AS d USING (document_id)
@@ -95,7 +95,7 @@ class SearchResult:
 
 
 def _row_to_chunk(row: tuple[Any, ...]) -> Chunk:
-    """Reconstruit un Chunk à partir des dix premières colonnes d'une recherche."""
+    """Reconstruit un Chunk à partir des onze premières colonnes d'une recherche."""
     return Chunk(
         document_id=row[0],
         article_id=row[1],
@@ -107,6 +107,7 @@ def _row_to_chunk(row: tuple[Any, ...]) -> Chunk:
         text=row[7],
         page_start=row[8],
         page_end=row[9],
+        section=row[10],
     )
 
 
@@ -191,6 +192,7 @@ def replace_document(
                         chunk.text,
                         chunk.page_start,
                         chunk.page_end,
+                        chunk.section,
                         Vector(list(vector)),
                     )
                     for position, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True))
@@ -221,7 +223,7 @@ def search(
     rows = connection.execute(
         _SEARCH, {"query": Vector(list(query_vector)), "model": embedding_model, "k": k}
     ).fetchall()
-    return [SearchResult(chunk=_row_to_chunk(row), score=1.0 - row[10]) for row in rows]
+    return [SearchResult(chunk=_row_to_chunk(row), score=1.0 - row[11]) for row in rows]
 
 
 def full_text_search(
@@ -246,7 +248,7 @@ def full_text_search(
     rows = connection.execute(
         _FULL_TEXT_SEARCH, {"question": question, "model": embedding_model, "k": k}
     ).fetchall()
-    return [SearchResult(chunk=_row_to_chunk(row), score=row[10]) for row in rows]
+    return [SearchResult(chunk=_row_to_chunk(row), score=row[11]) for row in rows]
 
 
 def reciprocal_rank_fusion(
